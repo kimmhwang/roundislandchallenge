@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { sb } from "./supabase";
+import LeafletMap from "./LeafletMap";
 
 // ===== ROUTE DATA =====
 const SEGS = [
@@ -545,6 +546,7 @@ function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullsc
   const [pinInput, setPinInput] = useState("");
   const [showPin, setShowPin] = useState(false);
   const [pinError, setPinError] = useState(false);
+  const [showGarminFallback, setShowGarminFallback] = useState(false);
 
   // Poll Supabase for ride state
   useEffect(() => {
@@ -669,29 +671,19 @@ function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullsc
         </div>
       )}
 
-      {/* Garmin Course Map (real route) */}
+      {/* PRIMARY: Leaflet Map (route + rider dot in one view) */}
       <div style={{ background:S.card, borderRadius:10, padding:10, border:`1px solid ${S.border}`, marginBottom:8 }}>
         <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
           <span style={{ fontSize:14 }}>🗺️</span>
           <div style={{ flex:1 }}>
-            <div style={{ fontSize:11, fontWeight:700, color:S.text, fontFamily:"system-ui" }}>Planned Route</div>
-            <div style={{ fontSize:8, color:S.dim, fontFamily:"system-ui" }}>Source of truth — same course on Fenix 6S</div>
+            <div style={{ fontSize:11, fontWeight:700, color:S.text, fontFamily:"system-ui" }}>Live Route Map</div>
+            <div style={{ fontSize:8, color:S.dim, fontFamily:"system-ui" }}>
+              <span style={{ color:"#22c55e" }}>● Completed</span> · <span style={{ color:"#3b82f6" }}>● Remaining</span>
+              {riderGps && <> · <span style={{ color:"#ec4899" }}>● Rider</span></>}
+            </div>
           </div>
-          <button onClick={()=>window.open(GARMIN_COURSE_EMBED.replace("/embed/","/"),"_blank")} style={{ padding:"4px 8px", fontSize:8, fontWeight:700, borderRadius:4, border:`1px solid ${S.border}`, background:"transparent", color:S.mut, cursor:"pointer", fontFamily:"system-ui" }}>Garmin ↗</button>
         </div>
-        <div style={{ position:"relative", width:"100%", paddingBottom:"117.8%", borderRadius:8, overflow:"hidden", background:"#0a0f1a" }}>
-          <iframe
-            src={GARMIN_COURSE_EMBED}
-            style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", border:"none" }}
-            title="Garmin Course"
-          />
-        </div>
-      </div>
-
-      {/* Schematic Route Map (with rider dot) */}
-      <div style={{ background:S.card, borderRadius:10, padding:10, border:`1px solid ${S.border}`, marginBottom:8 }}>
-        <div style={{ fontSize:9, color:S.mut, marginBottom:6, letterSpacing:1, fontFamily:"system-ui" }}>SCHEMATIC + LIVE POSITION</div>
-        <RouteMap state={{ segments, gpsPoints: [] }} lastGps={riderGps || null} gpsTracking={!!riderGps} highlightWp={null} brightness={brightness} />
+        <LeafletMap riderGps={riderGps} segments={segments} kmDone={kmDone} brightness={brightness} height={420} />
         {riderGps && (
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:6, padding:"4px 8px", background:"#0a1a0a", borderRadius:4 }}>
             <div style={{ fontSize:8, color:"#22c55e", fontFamily:"system-ui" }}>
@@ -705,6 +697,30 @@ function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullsc
           <button onClick={()=>window.open(liveTrackUrl,"_blank")} style={{ width:"100%", marginTop:6, padding:"8px", fontSize:10, fontWeight:700, borderRadius:6, border:"1px solid #3b82f6", background:"#3b82f611", color:"#3b82f6", cursor:"pointer", fontFamily:"system-ui" }}>
             ⌚ Open Garmin LiveTrack — real-time GPS ↗
           </button>
+        )}
+      </div>
+
+      {/* FALLBACK: Garmin Connect iframe (collapsible) */}
+      <div style={{ background:S.card, borderRadius:10, padding:10, border:`1px solid ${S.border}`, marginBottom:8 }}>
+        <button
+          onClick={()=>setShowGarminFallback(!showGarminFallback)}
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:6, background:"transparent", border:"none", color:S.text, cursor:"pointer", padding:0, fontFamily:"system-ui" }}
+        >
+          <span style={{ fontSize:14 }}>📋</span>
+          <div style={{ flex:1, textAlign:"left" }}>
+            <div style={{ fontSize:11, fontWeight:700 }}>Garmin Connect View</div>
+            <div style={{ fontSize:8, color:S.dim }}>Official course page with elevation profile</div>
+          </div>
+          <span style={{ fontSize:10, color:S.mut }}>{showGarminFallback ? "▼" : "▶"}</span>
+        </button>
+        {showGarminFallback && (
+          <div style={{ marginTop:8, position:"relative", width:"100%", paddingBottom:"117.8%", borderRadius:8, overflow:"hidden", background:"#0a0f1a" }}>
+            <iframe
+              src={GARMIN_COURSE_EMBED}
+              style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", border:"none" }}
+              title="Garmin Course"
+            />
+          </div>
         )}
       </div>
 
