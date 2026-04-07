@@ -1970,48 +1970,113 @@ function RouteMap({ state, lastGps, gpsTracking, highlightWp, brightness }) {
   );
 }
 
+const CARD_PHOTOS_KEY = "rti-card-photos";
+const loadCardPhotos = () => {
+  try { return JSON.parse(localStorage.getItem(CARD_PHOTOS_KEY) || "{}"); } catch(e) { return {}; }
+};
+const saveCardPhotos = (photos) => {
+  try { localStorage.setItem(CARD_PHOTOS_KEY, JSON.stringify(photos)); } catch(e) {}
+};
+
 function InstaCard({ seg, state, elapsed, kmDone, pct, dateInfo, S, onClose }) {
   const isFinal = seg === "final";
   const segData = isFinal ? null : SEGS.find(s=>s.id===seg);
+  const [photo, setPhoto] = useState(() => loadCardPhotos()[seg] || null);
+  const fileInputRef = useRef(null);
+
+  const handleFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { alert("Please select an image file"); return; }
+    if (file.size > 5 * 1024 * 1024) { alert("Image too large (max 5MB)"); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      setPhoto(dataUrl);
+      const photos = loadCardPhotos();
+      photos[seg] = dataUrl;
+      saveCardPhotos(photos);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removePhoto = () => {
+    setPhoto(null);
+    const photos = loadCardPhotos();
+    delete photos[seg];
+    saveCardPhotos(photos);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   return (
     <div style={{ position:"relative" }}>
       <button onClick={onClose} style={{ position:"absolute", top:4, right:4, zIndex:10, background:"#00000066", color:"#fff", border:"none", borderRadius:"50%", width:26, height:26, cursor:"pointer", fontSize:13 }}>×</button>
       <div style={{ aspectRatio:"4/5", background:"linear-gradient(160deg,#0a0a1a 0%,#0f172a 30%,#1e1b4b 70%,#0f172a 100%)", borderRadius:14, padding:20, display:"flex", flexDirection:"column", justifyContent:"space-between", border:"1px solid #312e81", overflow:"hidden", position:"relative" }}>
-        <div style={{ position:"absolute", top:0, left:0, right:0, bottom:0, opacity:0.03, backgroundImage:"repeating-linear-gradient(0deg,#fff 0px,#fff 1px,transparent 1px,transparent 40px),repeating-linear-gradient(90deg,#fff 0px,#fff 1px,transparent 1px,transparent 40px)" }} />
+        {/* Background photo (if uploaded) */}
+        {photo && (
+          <>
+            <div style={{ position:"absolute", top:0, left:0, right:0, bottom:0, backgroundImage:`url(${photo})`, backgroundSize:"cover", backgroundPosition:"center", zIndex:0 }} />
+            {/* Dark overlay for text readability */}
+            <div style={{ position:"absolute", top:0, left:0, right:0, bottom:0, background:"linear-gradient(180deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.35) 40%, rgba(0,0,0,0.75) 100%)", zIndex:0 }} />
+          </>
+        )}
+        {/* Grid overlay (only if no photo) */}
+        {!photo && (
+          <div style={{ position:"absolute", top:0, left:0, right:0, bottom:0, opacity:0.03, backgroundImage:"repeating-linear-gradient(0deg,#fff 0px,#fff 1px,transparent 1px,transparent 40px),repeating-linear-gradient(90deg,#fff 0px,#fff 1px,transparent 1px,transparent 40px)" }} />
+        )}
         <div style={{ position:"relative", zIndex:1 }}>
-          <div style={{ fontSize:9, letterSpacing:4, color:"#818cf8", fontWeight:700, fontFamily:"system-ui" }}>SG ROUND ISLAND</div>
-          <div style={{ fontSize:8, color:"#6366f1", marginTop:2, fontFamily:"system-ui" }}>{dateInfo ? `${dateInfo.label.toUpperCase()} · BLITZ · ${dateInfo.day.toUpperCase()}` : ""}</div>
+          <div style={{ fontSize:9, letterSpacing:4, color:photo?"#fff":"#818cf8", fontWeight:700, fontFamily:"system-ui", textShadow:photo?"0 1px 4px rgba(0,0,0,0.8)":"none" }}>SG ROUND ISLAND</div>
+          <div style={{ fontSize:8, color:photo?"#e5e7eb":"#6366f1", marginTop:2, fontFamily:"system-ui", textShadow:photo?"0 1px 4px rgba(0,0,0,0.8)":"none" }}>{dateInfo ? `${dateInfo.label.toUpperCase()} · BLITZ · ${dateInfo.day.toUpperCase()}` : ""}</div>
         </div>
         <div style={{ textAlign:"center", position:"relative", zIndex:1 }}>
           {isFinal ? (
             <>
-              <div style={{ fontSize:44, fontWeight:800, background:"linear-gradient(135deg,#22c55e,#3b82f6)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>DONE</div>
-              <div style={{ fontSize:13, color:"#a5b4fc", marginTop:4, fontFamily:"system-ui" }}>{TOTAL_KM} km · {fmtTime(elapsed)}</div>
+              <div style={{ fontSize:44, fontWeight:800, background:"linear-gradient(135deg,#22c55e,#3b82f6)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", textShadow:photo?"0 2px 8px rgba(0,0,0,0.8)":"none" }}>DONE</div>
+              <div style={{ fontSize:13, color:photo?"#fff":"#a5b4fc", marginTop:4, fontFamily:"system-ui", textShadow:photo?"0 1px 4px rgba(0,0,0,0.8)":"none" }}>{TOTAL_KM} km · {fmtTime(elapsed)}</div>
             </>
           ) : (
             <>
-              <div style={{ fontSize:10, color:"#818cf8", fontWeight:700, marginBottom:3, fontFamily:"system-ui" }}>SEGMENT {seg} OF 11</div>
-              <div style={{ fontSize:18, fontWeight:800, color:"#e2e8f0", fontFamily:"system-ui", marginBottom:4 }}>{segData?.name}</div>
+              <div style={{ fontSize:10, color:photo?"#fff":"#818cf8", fontWeight:700, marginBottom:3, fontFamily:"system-ui", textShadow:photo?"0 1px 4px rgba(0,0,0,0.8)":"none" }}>SEGMENT {seg} OF 11</div>
+              <div style={{ fontSize:18, fontWeight:800, color:photo?"#fff":"#e2e8f0", fontFamily:"system-ui", marginBottom:4, textShadow:photo?"0 2px 6px rgba(0,0,0,0.9)":"none" }}>{segData?.name}</div>
               <div style={{ display:"inline-block", padding:"2px 8px", borderRadius:3, background:segData?.c, color:"#fff", fontSize:9, fontWeight:700 }}>{segData?.d} · {segData?.km} km</div>
             </>
           )}
         </div>
         <div style={{ position:"relative", zIndex:1 }}>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:10 }}>
-            <div style={{ textAlign:"center" }}><div style={{ fontSize:18, fontWeight:800, color:"#22c55e" }}>{kmDone}</div><div style={{ fontSize:7, color:"#64748b" }}>KM DONE</div></div>
-            <div style={{ textAlign:"center" }}><div style={{ fontSize:18, fontWeight:800, color:"#3b82f6" }}>{pct}%</div><div style={{ fontSize:7, color:"#64748b" }}>COMPLETE</div></div>
-            <div style={{ textAlign:"center" }}><div style={{ fontSize:18, fontWeight:800, color:"#eab308" }}>{fmtPace(kmDone,elapsed)}</div><div style={{ fontSize:7, color:"#64748b" }}>KM/H AVG</div></div>
+            <div style={{ textAlign:"center" }}><div style={{ fontSize:18, fontWeight:800, color:"#22c55e", textShadow:photo?"0 1px 4px rgba(0,0,0,0.9)":"none" }}>{kmDone}</div><div style={{ fontSize:7, color:photo?"#e5e7eb":"#64748b", textShadow:photo?"0 1px 2px rgba(0,0,0,0.8)":"none" }}>KM DONE</div></div>
+            <div style={{ textAlign:"center" }}><div style={{ fontSize:18, fontWeight:800, color:"#3b82f6", textShadow:photo?"0 1px 4px rgba(0,0,0,0.9)":"none" }}>{pct}%</div><div style={{ fontSize:7, color:photo?"#e5e7eb":"#64748b", textShadow:photo?"0 1px 2px rgba(0,0,0,0.8)":"none" }}>COMPLETE</div></div>
+            <div style={{ textAlign:"center" }}><div style={{ fontSize:18, fontWeight:800, color:"#eab308", textShadow:photo?"0 1px 4px rgba(0,0,0,0.9)":"none" }}>{fmtPace(kmDone,elapsed)}</div><div style={{ fontSize:7, color:photo?"#e5e7eb":"#64748b", textShadow:photo?"0 1px 2px rgba(0,0,0,0.8)":"none" }}>KM/H AVG</div></div>
           </div>
-          <div style={{ height:3, background:"#1f2937", borderRadius:2, overflow:"hidden", marginBottom:6 }}>
+          <div style={{ height:3, background:photo?"rgba(255,255,255,0.2)":"#1f2937", borderRadius:2, overflow:"hidden", marginBottom:6 }}>
             <div style={{ width:`${pct}%`, height:"100%", background:"linear-gradient(90deg,#22c55e,#3b82f6)", borderRadius:2 }} />
           </div>
           <div style={{ display:"flex", height:6, borderRadius:3, overflow:"hidden" }}>
-            {state.segments.map((s,i)=>(<div key={i} style={{ flex:s.km, background:s.completed?SEGS[i].c:"#1f2937" }} />))}
+            {state.segments.map((s,i)=>(<div key={i} style={{ flex:s.km, background:s.completed?SEGS[i].c:(photo?"rgba(255,255,255,0.2)":"#1f2937") }} />))}
           </div>
-          <div style={{ fontSize:7, color:"#4b5563", marginTop:6, textAlign:"center", fontFamily:"system-ui" }}>🚴 Round Island · Singapore {TOTAL_KM}km · Recovery Ride</div>
+          <div style={{ fontSize:7, color:photo?"#e5e7eb":"#4b5563", marginTop:6, textAlign:"center", fontFamily:"system-ui", textShadow:photo?"0 1px 2px rgba(0,0,0,0.8)":"none" }}>🚴 Round Island · Singapore {TOTAL_KM}km · Recovery Ride</div>
         </div>
       </div>
-      <p style={{ fontSize:8, color:S.dim, textAlign:"center", marginTop:4, fontFamily:"system-ui" }}>Screenshot for Instagram</p>
+
+      {/* Photo controls */}
+      <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleFile} style={{ display:"none" }} />
+      <div style={{ display:"flex", gap:4, marginTop:6 }}>
+        {!photo ? (
+          <button onClick={()=>fileInputRef.current?.click()} style={{ flex:1, padding:"8px", fontSize:10, fontWeight:700, borderRadius:5, border:`1px solid ${S.border}`, background:S.card, color:S.text, cursor:"pointer", fontFamily:"system-ui" }}>
+            📷 Add Photo
+          </button>
+        ) : (
+          <>
+            <button onClick={()=>fileInputRef.current?.click()} style={{ flex:1, padding:"8px", fontSize:10, fontWeight:700, borderRadius:5, border:`1px solid ${S.border}`, background:S.card, color:S.text, cursor:"pointer", fontFamily:"system-ui" }}>
+              🔄 Replace
+            </button>
+            <button onClick={removePhoto} style={{ padding:"8px 12px", fontSize:10, fontWeight:700, borderRadius:5, border:`1px solid ${S.border}`, background:"transparent", color:"#ef4444", cursor:"pointer", fontFamily:"system-ui" }}>
+              🗑
+            </button>
+          </>
+        )}
+      </div>
+      <p style={{ fontSize:8, color:S.dim, textAlign:"center", marginTop:4, fontFamily:"system-ui" }}>Screenshot card for Instagram · Photos stored on your phone only</p>
     </div>
   );
 }
