@@ -168,6 +168,24 @@ const TIPS = [
   ["Post-Tx Skin","#f43f5e","Never touch face with cycling gloves. Saline mist at every stop. Shower immediately after."],
 ];
 
+// ===== STREAM / RECORD WORTHY MOMENTS =====
+// type: "live" = YouTube Live burst, "record" = Insta360 cinematic capture
+// trigger: distance in km from this point to fire the alert
+const MOMENTS = [
+  { id:"start",     lat:1.301, lng:103.912, name:"Ride Start at ECP",         type:"live",   why:"Hype, conditions check, 'we're going!'", segment:1, trigger:0.5 },
+  { id:"mbs",       lat:1.281, lng:103.859, name:"Marina Barrage Night Skyline", type:"live",   why:"CBD lights backdrop, iconic SG view", segment:1, trigger:0.5 },
+  { id:"keppel",    lat:1.264, lng:103.822, name:"Keppel/Sentosa Cable Cars", type:"record", why:"Lit cable cars over Sentosa", segment:2, trigger:0.4 },
+  { id:"tuas-pre",  lat:1.295, lng:103.700, name:"Tuas Industrial Approach",  type:"record", why:"Empty roads, alien vibe, pre-dawn", segment:5, trigger:1.0 },
+  { id:"lp1",       lat:1.295, lng:103.637, name:"Lamp Post 1 — Westernmost SG", type:"live",   why:"The pilgrimage moment. Iconic RTI photo.", segment:5, trigger:0.5 },
+  { id:"neotiew",   lat:1.405, lng:103.700, name:"Neo Tiew Dawn Kampong",     type:"record", why:"Rustic 'Singapore you don't see'", segment:6, trigger:0.8 },
+  { id:"kranji",    lat:1.430, lng:103.745, name:"Kranji Dam — JB Skyline",   type:"record", why:"Causeway view at dawn", segment:7, trigger:0.5 },
+  { id:"woodlands", lat:1.449, lng:103.789, name:"Woodlands Waterfront Sunrise", type:"live",   why:"Dawn over Johor Strait, breakfast", segment:7, trigger:0.5 },
+  { id:"yishun",    lat:1.418, lng:103.841, name:"Yishun Dam Morning",        type:"live",   why:"Reservoir/sea panorama, golden hour", segment:8, trigger:0.5 },
+  { id:"changi",    lat:1.388, lng:103.985, name:"Changi Village Hawker",     type:"live",   why:"Pre-TMCR brunch, food content", segment:10, trigger:0.5 },
+  { id:"tmcr",      lat:1.345, lng:103.975, name:"TMCR Cinematic Stretch",    type:"record", why:"Long road to vanishing point + cargo ships", segment:10, trigger:1.0 },
+  { id:"finish",    lat:1.301, lng:103.912, name:"Finish at Marine Cove",     type:"live",   why:"Victory moment, full circle complete!", segment:11, trigger:0.5 },
+];
+
 // ===== HELPERS =====
 const toS = (lat,lng) => ({ x:(lng-103.60)/0.42*280+10, y:(1.47-lat)/0.23*140+10 });
 const SG = "M18,118 L24,135 L44,144 L78,142 L109,136 L135,140 L166,136 L192,136 L218,128 L244,114 L270,100 L290,85 L292,77 L283,68 L262,61 L244,63 L222,50 L205,46 L183,35 L166,24 L148,20 L131,22 L118,24 L105,28 L85,30 L70,33 L57,41 L44,52 L33,70 L24,87 L18,105 Z";
@@ -202,6 +220,23 @@ const bearing = (p1, p2) => {
   return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 };
 const bearingCompass = (deg) => ["N","NE","E","SE","S","SW","W","NW"][Math.round(deg/45) % 8];
+
+// Find the closest stream/record-worthy moment within trigger range
+const findActiveMoment = (gps, currentSegId, dismissedIds = []) => {
+  if (!gps) return null;
+  let closest = null;
+  let closestDist = Infinity;
+  for (const m of MOMENTS) {
+    if (dismissedIds.includes(m.id)) continue;
+    if (m.segment < currentSegId) continue; // Skip past moments
+    const d = hav(gps, m);
+    if (d < m.trigger && d < closestDist) {
+      closest = { ...m, distance: d };
+      closestDist = d;
+    }
+  }
+  return closest;
+};
 
 // YouTube URL → embed URL parser
 const ytEmbedUrl = (url) => {
@@ -810,6 +845,49 @@ function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearing
   const [showStops, setShowStops] = useState(false);
   const [showTurns, setShowTurns] = useState(false);
   const [showMap, setShowMap] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [dismissedMoments, setDismissedMoments] = useState([]);
+
+  // Poll chat messages
+  useEffect(() => {
+    if (state.status !== "active") return;
+    const load = async () => {
+      try {
+        const msgs = await sb.get("rti_chat", "ride_id=eq.current&order=created_at.desc&limit=10");
+        if (Array.isArray(msgs)) setMessages(msgs);
+      } catch(e) {}
+    };
+    load();
+    const iv = setInterval(load, 8000);
+    return () => clearInterval(iv);
+  }, [state.status]);
+
+  const sendMessage = async () => {
+    if (!draft.trim() || sending) return;
+    const myName = localStorage.getItem(CHAT_NAME_KEY) || "Rider";
+    setSending(true);
+    try {
+      await sb.insert("rti_chat", {
+        ride_id: "current",
+        name: myName,
+        text: draft.trim().slice(0, 300),
+        km: kmDone,
+        ride_status: state.status,
+      });
+      setDraft("");
+      // Refresh
+      const msgs = await sb.get("rti_chat", "ride_id=eq.current&order=created_at.desc&limit=10");
+      if (Array.isArray(msgs)) setMessages(msgs);
+    } catch(e) {}
+    setSending(false);
+  };
+
+  // Find active moment alert
+  const activeMoment = findActiveMoment(lastGps, currentSeg.id, dismissedMoments);
+  const dismissMoment = (id) => setDismissedMoments(prev => [...prev, id]);
 
   if (state.status === "idle") {
     return (
@@ -832,6 +910,31 @@ function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearing
 
   return (
     <div>
+      {/* MOMENT ALERT — flashes when near stream/record-worthy spot */}
+      {activeMoment && (
+        <div style={{ background: activeMoment.type === "live" ? "#3d0a0a" : "#1a0d2e", borderRadius:10, padding:12, marginBottom:8, border:`2px solid ${activeMoment.type === "live" ? "#ef4444" : "#a78bfa"}`, animation:"pulse 2s infinite" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+            <span style={{ fontSize:18 }}>{activeMoment.type === "live" ? "🔴" : "📹"}</span>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:8, color: activeMoment.type === "live" ? "#fca5a5" : "#c4b5fd", fontWeight:700, letterSpacing:2, fontFamily:"system-ui" }}>
+                {activeMoment.type === "live" ? "🔴 GO LIVE NOW" : "📹 RECORD CINEMATIC"}
+              </div>
+              <div style={{ fontSize:13, fontWeight:800, color:"#fff", fontFamily:"system-ui" }}>{activeMoment.name}</div>
+            </div>
+            <button onClick={()=>dismissMoment(activeMoment.id)} style={{ background:"transparent", border:"none", color:"#fff", fontSize:16, cursor:"pointer", padding:4 }}>×</button>
+          </div>
+          <div style={{ fontSize:10, color:"#e5e7eb", lineHeight:1.4, marginBottom:8, fontFamily:"system-ui" }}>{activeMoment.why}</div>
+          <div style={{ fontSize:9, color: activeMoment.type === "live" ? "#fca5a5" : "#c4b5fd", fontFamily:"system-ui" }}>
+            📍 {(activeMoment.distance * 1000).toFixed(0)}m away
+          </div>
+          {activeMoment.type === "live" && (
+            <button onClick={()=>setTab("sync")} style={{ width:"100%", marginTop:8, padding:"8px", fontSize:11, fontWeight:700, borderRadius:5, border:"none", cursor:"pointer", background:"#ef4444", color:"#fff", fontFamily:"system-ui" }}>
+              Open Sync → Go Live
+            </button>
+          )}
+        </div>
+      )}
+
       {/* HERO STATS — always visible, glanceable at speed */}
       <div style={{ background:S.card, borderRadius:10, padding:"10px 12px", marginBottom:8, border:`1px solid ${S.border}` }}>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:6, alignItems:"center" }}>
@@ -1023,6 +1126,57 @@ function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearing
         )}
       </div>
 
+      {/* COLLAPSIBLE: Live Chat (read + quick reply) */}
+      <div style={{ background:S.card, borderRadius:10, padding:10, marginBottom:6, border:`1px solid ${messages.length > 0 ? "#3b82f6" : S.border}` }}>
+        <button
+          onClick={()=>setShowChat(!showChat)}
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:8, background:"transparent", border:"none", color:S.text, cursor:"pointer", padding:0, fontFamily:"system-ui", textAlign:"left" }}
+        >
+          <span style={{ fontSize:14 }}>💬</span>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:11, fontWeight:700 }}>Live Chat <span style={{ fontSize:9, color:S.dim, fontWeight:400 }}>· {messages.length} msgs</span></div>
+            {messages.length > 0 && !showChat && (
+              <div style={{ fontSize:9, color:"#93c5fd", marginTop:2, lineHeight:1.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                <b>{messages[0].name}:</b> {messages[0].text}
+              </div>
+            )}
+          </div>
+          <span style={{ fontSize:10, color:S.mut, flexShrink:0 }}>{showChat ? "▼" : "▶"}</span>
+        </button>
+        {showChat && (
+          <div style={{ marginTop:8 }}>
+            <div style={{ maxHeight:180, overflowY:"auto", background:"#050a12", borderRadius:6, padding:8, marginBottom:8, border:`1px solid ${S.border}` }}>
+              {messages.length === 0 ? (
+                <div style={{ textAlign:"center", color:S.dim, fontSize:10, padding:16, fontFamily:"system-ui" }}>No messages yet</div>
+              ) : (
+                [...messages].reverse().map(m => (
+                  <div key={m.id} style={{ marginBottom:6, paddingBottom:4, borderBottom:`1px solid ${S.border}` }}>
+                    <div style={{ display:"flex", gap:6, alignItems:"baseline", marginBottom:2 }}>
+                      <span style={{ fontSize:10, fontWeight:700, color:"#93c5fd", fontFamily:"system-ui" }}>{m.name}</span>
+                      <span style={{ fontSize:8, color:S.dim, fontFamily:"system-ui" }}>{fmtClock(new Date(m.created_at).getTime())}</span>
+                    </div>
+                    <div style={{ fontSize:10, color:S.text, lineHeight:1.4, fontFamily:"system-ui", wordBreak:"break-word" }}>{m.text}</div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div style={{ display:"flex", gap:4 }}>
+              <input
+                type="text" value={draft} onChange={e=>setDraft(e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter")sendMessage();}}
+                placeholder="Quick reply..."
+                maxLength={300}
+                disabled={sending}
+                style={{ flex:1, padding:"8px 10px", fontSize:11, borderRadius:5, border:`1px solid ${S.border}`, background:"#0a0f1a", color:S.text, outline:"none", fontFamily:"system-ui" }}
+              />
+              <button onClick={sendMessage} disabled={!draft.trim() || sending} style={{ padding:"8px 14px", fontSize:10, fontWeight:700, borderRadius:5, border:"none", cursor:draft.trim()&&!sending?"pointer":"not-allowed", background:S.acc, color:"#fff", opacity:draft.trim()&&!sending?1:0.4, fontFamily:"system-ui" }}>
+                {sending ? "..." : "Send"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* QUICK CONTROLS — pause / GPS / Wake */}
       <div style={{ display:"flex", gap:4, marginTop:8 }}>
         {state.status === "active" && <Btn onClick={pauseRide} bg="#eab308" text="⏸ Pause" />}
@@ -1114,11 +1268,24 @@ function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, comple
 // MAP + CHAT TAB
 // ==========================================================================
 function MapChatTab({ state, lastGps, gpsTracking, nextWp, kmDone, pct, brightness, S }) {
+  // Build riderGps shape compatible with LeafletMap
+  const riderGps = lastGps ? { lat: lastGps.lat, lng: lastGps.lng, speed: lastGps.speed, t: lastGps.t } : null;
+
   return (
     <div>
-      {/* Map */}
+      {/* Leaflet route map (same as observer) */}
       <div style={{ background:S.card, borderRadius:10, padding:10, border:`1px solid ${S.border}`, marginBottom:8 }}>
-        <RouteMap state={state} lastGps={lastGps} gpsTracking={gpsTracking} highlightWp={nextWp} brightness={brightness} />
+        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
+          <span style={{ fontSize:14 }}>🗺️</span>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:S.text, fontFamily:"system-ui" }}>Route Map</div>
+            <div style={{ fontSize:8, color:S.dim, fontFamily:"system-ui" }}>
+              <span style={{ color:"#22c55e" }}>● Done</span> · <span style={{ color:"#3b82f6" }}>● Remaining</span>
+              {riderGps && <> · <span style={{ color:"#ec4899" }}>● You</span></>}
+            </div>
+          </div>
+        </div>
+        <LeafletMap riderGps={riderGps} segments={state.segments} kmDone={kmDone} brightness={brightness} height={360} />
       </div>
 
       {/* Segment progress bar */}
@@ -1135,7 +1302,7 @@ function MapChatTab({ state, lastGps, gpsTracking, nextWp, kmDone, pct, brightne
         </div>
       </div>
 
-      {/* Chat */}
+      {/* Full Chat Room */}
       <ChatRoom state={state} kmDone={kmDone} S={S} />
     </div>
   );
