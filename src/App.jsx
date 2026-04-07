@@ -405,12 +405,36 @@ export default function App() {
     if (ns.status === "finished") ns.status = "active";
     setState(ns); save(ns);
   };
-  const resetRide = async () => {
+  const resetRide = async (clearChat = false) => {
+    if (!confirm(clearChat ? "FULL RESET: Clear ride state, GPS, and ALL chat messages? This cannot be undone." : "Reset ride state? Chat messages will be kept.")) return;
     setGpsTracking(false); setLastGps(null);
     await releaseWakeLock();
     const ns = initState();
     setState(ns);
     try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+    // Clear Supabase ride row so observers also see fresh state
+    try {
+      await sb.upsert("rti_rides", {
+        id: "current",
+        status: "idle",
+        start_time: null,
+        pause_time: null,
+        total_paused: 0,
+        date_option: null,
+        segments: SEGS.map(s => ({ id:s.id, name:s.name, km:s.km, d:s.d, c:s.c, completed:false, completedAt:null })),
+        live_track_url: "",
+        strava_url: "",
+        youtube_stream_url: "",
+        stream_live: false,
+        last_gps: null,
+        km_done: 0,
+        pct: 0,
+        updated_at: new Date().toISOString(),
+      });
+    } catch(e) {}
+    if (clearChat) {
+      try { await sb.del("rti_chat", "ride_id=eq.current"); } catch(e) {}
+    }
   };
   const addNote = (text) => {
     if (!text.trim()) return;
@@ -833,6 +857,57 @@ function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearing
         {withinProximity && <div style={{ fontSize:10, color:"#22c55e", fontWeight:700, marginTop:6, fontFamily:"system-ui" }}>✓ Within 500m — tap Done when reached</div>}
       </div>
 
+      {/* Stops & Facilities for current segment */}
+      {currentTurns && (
+        <div style={{ background:S.card, borderRadius:10, padding:12, marginBottom:8, border:`1px solid ${S.border}` }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
+            <span style={{ fontSize:14 }}>🚻</span>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:S.text, fontFamily:"system-ui" }}>Stops & Facilities</div>
+              <div style={{ fontSize:8, color:S.dim, fontFamily:"system-ui" }}>For Segment {currentSeg.id}: {currentSeg.name}</div>
+            </div>
+          </div>
+
+          {/* Resupply (most critical) */}
+          {currentTurns.resupply && (
+            <div style={{ marginBottom:6, padding:"8px 10px", background:"#0a1a0a", borderRadius:6, borderLeft:"3px solid #22c55e" }}>
+              <div style={{ fontSize:8, color:"#16a34a", fontWeight:700, marginBottom:2, letterSpacing:1, fontFamily:"system-ui" }}>🚰 WATER / FOOD</div>
+              <div style={{ fontSize:10, color:"#22c55e", fontFamily:"system-ui", lineHeight:1.4 }}>{currentTurns.resupply}</div>
+            </div>
+          )}
+
+          {/* Toilets */}
+          {currentTurns.toilets && (
+            <div style={{ marginBottom:6, padding:"8px 10px", background:"#0a0a1a", borderRadius:6, borderLeft:"3px solid #3b82f6" }}>
+              <div style={{ fontSize:8, color:"#60a5fa", fontWeight:700, marginBottom:2, letterSpacing:1, fontFamily:"system-ui" }}>🚻 TOILETS</div>
+              {currentTurns.toilets.map((t,i) => (
+                <div key={i} style={{ fontSize:10, color:"#93c5fd", fontFamily:"system-ui", lineHeight:1.4, marginTop:i?2:0 }}>• {t}</div>
+              ))}
+            </div>
+          )}
+
+          {/* Photo spots */}
+          {currentTurns.photo && (
+            <div style={{ marginBottom:6, padding:"8px 10px", background:"#1a0a1a", borderRadius:6, borderLeft:"3px solid #c084fc" }}>
+              <div style={{ fontSize:8, color:"#c084fc", fontWeight:700, marginBottom:2, letterSpacing:1, fontFamily:"system-ui" }}>📸 PHOTO SPOTS</div>
+              {currentTurns.photo.map((p,i) => (
+                <div key={i} style={{ fontSize:10, color:"#d8b4fe", fontFamily:"system-ui", lineHeight:1.4, marginTop:i?2:0 }}>• {p}</div>
+              ))}
+            </div>
+          )}
+
+          {/* Shelter (rain plan) */}
+          {currentTurns.shelter && (
+            <div style={{ padding:"8px 10px", background:"#1a1500", borderRadius:6, borderLeft:"3px solid #fbbf24" }}>
+              <div style={{ fontSize:8, color:"#fbbf24", fontWeight:700, marginBottom:2, letterSpacing:1, fontFamily:"system-ui" }}>☂️ SHELTER (rain plan)</div>
+              {currentTurns.shelter.map((s,i) => (
+                <div key={i} style={{ fontSize:10, color:"#fde68a", fontFamily:"system-ui", lineHeight:1.4, marginTop:i?2:0 }}>• {s}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Current segment turns */}
       <div style={{ background:S.card, borderRadius:10, padding:12, marginBottom:8, border:`1px solid ${S.border}` }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
@@ -946,11 +1021,15 @@ function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, comple
         <div style={{ margin:"10px 10px 0", height:5, background:"#1f2937", borderRadius:3, overflow:"hidden" }}>
           <div style={{ width:`${pct}%`, height:"100%", background:"linear-gradient(90deg, #22c55e, #3b82f6)", borderRadius:3, transition:"width 0.5s" }} />
         </div>
-        <div style={{ display:"flex", gap:6, justifyContent:"center", marginTop:10 }}>
+        <div style={{ display:"flex", gap:6, justifyContent:"center", marginTop:10, flexWrap:"wrap" }}>
           {state.status === "active" && <Btn onClick={pauseRide} bg="#eab308" text="⏸ Pause" />}
           {state.status === "paused" && <Btn onClick={resumeRide} bg="#22c55e" text="▶ Resume" />}
           {state.status === "finished" && <div style={{ fontSize:13, fontWeight:700, color:"#22c55e", padding:"8px 14px" }}>🏁 COMPLETE!</div>}
-          <Btn onClick={resetRide} bg="#ef4444" text="↺ Reset" />
+          <Btn onClick={()=>resetRide(false)} bg="#ef4444" text="↺ Reset" />
+          <Btn onClick={()=>resetRide(true)} bg="#7f1d1d" text="🗑 Full Reset" />
+        </div>
+        <div style={{ fontSize:8, color:S.dim, textAlign:"center", marginTop:4, fontFamily:"system-ui" }}>
+          Reset = clears ride state · Full Reset = also clears chat (use after testing, before real ride)
         </div>
       </div>
 
