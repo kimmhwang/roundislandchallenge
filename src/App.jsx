@@ -807,6 +807,10 @@ function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullsc
 // NAV TAB
 // ==========================================================================
 function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearingToNextWp, withinProximity, lastGps, gpsTracking, elapsed, kmDone, kmLeft, pct, completeSeg, pauseRide, resumeRide, setGpsTracking, requestWakeLock, wakeLock, brightness, setTab, S }) {
+  const [showStops, setShowStops] = useState(false);
+  const [showTurns, setShowTurns] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+
   if (state.status === "idle") {
     return (
       <div style={{ textAlign:"center", padding:"24px 12px" }}>
@@ -822,154 +826,204 @@ function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearing
     );
   }
 
+  // Critical hazard detection (only show in-motion warnings if word "⚠️" present)
+  const hasCriticalHazard = currentTurns?.hazards?.includes("⚠️");
+  const curSpeed = lastGps?.speed || 0;
+
   return (
     <div>
-      {/* Next waypoint */}
+      {/* HERO STATS — always visible, glanceable at speed */}
+      <div style={{ background:S.card, borderRadius:10, padding:"10px 12px", marginBottom:8, border:`1px solid ${S.border}` }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:6, alignItems:"center" }}>
+          <div style={{ textAlign:"center" }}>
+            <div style={{ fontSize:16, fontWeight:800, color:S.text, fontVariantNumeric:"tabular-nums", fontFamily:"system-ui" }}>{fmtTime(elapsed).slice(0,5)}</div>
+            <div style={{ fontSize:7, color:S.dim, letterSpacing:1 }}>TIME</div>
+          </div>
+          <div style={{ textAlign:"center" }}>
+            <div style={{ fontSize:16, fontWeight:800, color:"#22c55e", fontVariantNumeric:"tabular-nums", fontFamily:"system-ui" }}>{kmDone}</div>
+            <div style={{ fontSize:7, color:S.dim, letterSpacing:1 }}>KM DONE</div>
+          </div>
+          <div style={{ textAlign:"center" }}>
+            <div style={{ fontSize:16, fontWeight:800, color: curSpeed > 0 ? "#3b82f6" : S.dim, fontVariantNumeric:"tabular-nums", fontFamily:"system-ui" }}>{curSpeed > 0 ? curSpeed.toFixed(0) : "—"}</div>
+            <div style={{ fontSize:7, color:S.dim, letterSpacing:1 }}>KM/H NOW</div>
+          </div>
+          <div style={{ textAlign:"center" }}>
+            <div style={{ fontSize:16, fontWeight:800, color:"#a78bfa", fontVariantNumeric:"tabular-nums", fontFamily:"system-ui" }}>{pct}%</div>
+            <div style={{ fontSize:7, color:S.dim, letterSpacing:1 }}>DONE</div>
+          </div>
+        </div>
+        {/* Progress bar */}
+        <div style={{ marginTop:6, height:3, background:"#1f2937", borderRadius:2, overflow:"hidden" }}>
+          <div style={{ width:`${pct}%`, height:"100%", background:"linear-gradient(90deg, #22c55e, #3b82f6)", transition:"width 0.5s" }} />
+        </div>
+      </div>
+
+      {/* NEXT WAYPOINT — Hero element, biggest on screen */}
       <div style={{ background: withinProximity ? "#1a2e1a" : S.card, borderRadius:10, padding:14, marginBottom:8, border:`2px solid ${withinProximity?"#22c55e":S.border}`, transition:"all 0.3s" }}>
         <div style={{ fontSize:9, color:S.mut, letterSpacing:2, marginBottom:4 }}>NEXT WAYPOINT</div>
-        <div style={{ fontSize:18, fontWeight:800, color:S.text, fontFamily:"system-ui", marginBottom:6 }}>{nextWp.name}</div>
+        <div style={{ fontSize:16, fontWeight:800, color:S.text, fontFamily:"system-ui", marginBottom:8 }}>{nextWp.name}</div>
         {lastGps && distToNextWp !== null ? (
-          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <div style={{ display:"flex", gap:12, alignItems:"center" }}>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:28, fontWeight:800, color: withinProximity?"#22c55e":"#fbbf24", fontVariantNumeric:"tabular-nums" }}>
-                {distToNextWp < 1 ? `${(distToNextWp*1000).toFixed(0)}m` : `${distToNextWp.toFixed(2)}km`}
+              <div style={{ fontSize:42, fontWeight:800, color: withinProximity?"#22c55e":"#fbbf24", fontVariantNumeric:"tabular-nums", lineHeight:1, fontFamily:"system-ui" }}>
+                {distToNextWp < 1 ? `${(distToNextWp*1000).toFixed(0)}` : `${distToNextWp.toFixed(1)}`}
               </div>
-              <div style={{ fontSize:8, color:S.dim }}>STRAIGHT LINE</div>
+              <div style={{ fontSize:9, color:S.dim, marginTop:2 }}>{distToNextWp < 1 ? "METRES" : "KM"} · STRAIGHT</div>
             </div>
             <div style={{ textAlign:"center" }}>
-              <div style={{ width:60, height:60 }}>
+              <div style={{ width:72, height:72 }}>
                 <svg viewBox="0 0 60 60" style={{ width:"100%", height:"100%" }}>
                   <circle cx="30" cy="30" r="26" fill="none" stroke={S.border} strokeWidth="2" />
                   <g transform={`rotate(${bearingToNextWp} 30 30)`}>
-                    <polygon points="30,10 36,32 30,28 24,32" fill="#fbbf24" />
+                    <polygon points="30,8 38,34 30,28 22,34" fill="#fbbf24" />
                   </g>
                   <text x="30" y="8" fill={S.mut} fontSize="6" textAnchor="middle">N</text>
                 </svg>
               </div>
-              <div style={{ fontSize:9, color:S.text, fontWeight:700 }}>{bearingCompass(bearingToNextWp)} {bearingToNextWp.toFixed(0)}°</div>
+              <div style={{ fontSize:11, color:S.text, fontWeight:700, marginTop:2 }}>{bearingCompass(bearingToNextWp)} {bearingToNextWp.toFixed(0)}°</div>
             </div>
           </div>
         ) : (
-          <div style={{ fontSize:11, color:S.mut, fontFamily:"system-ui" }}>
-            {gpsTracking ? "Acquiring GPS..." : "Enable GPS in Sync tab"}
+          <div style={{ fontSize:12, color:S.mut, fontFamily:"system-ui", padding:"8px 0" }}>
+            {gpsTracking ? "📡 Acquiring GPS..." : "⚠️ Enable GPS in Sync tab"}
           </div>
         )}
-        {withinProximity && <div style={{ fontSize:10, color:"#22c55e", fontWeight:700, marginTop:6, fontFamily:"system-ui" }}>✓ Within 500m — tap Done when reached</div>}
+        {withinProximity && <div style={{ fontSize:11, color:"#22c55e", fontWeight:700, marginTop:8, fontFamily:"system-ui", textAlign:"center" }}>✓ Within 500m — tap DONE below</div>}
       </div>
 
-      {/* Stops & Facilities for current segment */}
-      {currentTurns && (
-        <div style={{ background:S.card, borderRadius:10, padding:12, marginBottom:8, border:`1px solid ${S.border}` }}>
-          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
-            <span style={{ fontSize:14 }}>🚻</span>
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:11, fontWeight:700, color:S.text, fontFamily:"system-ui" }}>Stops & Facilities</div>
-              <div style={{ fontSize:8, color:S.dim, fontFamily:"system-ui" }}>For Segment {currentSeg.id}: {currentSeg.name}</div>
-            </div>
+      {/* CURRENT SEGMENT + DONE BUTTON — most critical action */}
+      <div style={{ background:S.card, borderRadius:10, padding:12, marginBottom:8, border:`1px solid ${S.border}` }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:9, color:S.mut, letterSpacing:2 }}>SEG {currentSeg.id}/11 · {currentSeg.km}km</div>
+            <div style={{ fontSize:14, fontWeight:700, color:S.text, fontFamily:"system-ui" }}>{currentSeg.name}</div>
           </div>
+          <span style={{ background:currentSeg.c, color:"#fff", padding:"3px 8px", borderRadius:3, fontSize:9, fontWeight:700, flexShrink:0 }}>{currentSeg.d}</span>
+        </div>
 
-          {/* Resupply (most critical) */}
-          {currentTurns.resupply && (
-            <div style={{ marginBottom:6, padding:"8px 10px", background:"#0a1a0a", borderRadius:6, borderLeft:"3px solid #22c55e" }}>
-              <div style={{ fontSize:8, color:"#16a34a", fontWeight:700, marginBottom:2, letterSpacing:1, fontFamily:"system-ui" }}>🚰 WATER / FOOD</div>
-              <div style={{ fontSize:10, color:"#22c55e", fontFamily:"system-ui", lineHeight:1.4 }}>{currentTurns.resupply}</div>
+        {/* Critical hazard warning — always visible if present */}
+        {hasCriticalHazard && (
+          <div style={{ padding:"8px 10px", background:"#2d1b00", borderRadius:5, fontSize:11, color:"#fbbf24", fontFamily:"system-ui", marginBottom:8, lineHeight:1.4, borderLeft:"3px solid #fbbf24" }}>
+            {currentTurns.hazards}
+          </div>
+        )}
+
+        {/* Big Done button */}
+        {!currentSeg.completed && state.status === "active" && (
+          <button onClick={()=>completeSeg(currentSeg.id)} style={{ width:"100%", padding:"14px", fontSize:14, fontWeight:800, borderRadius:8, border:"none", cursor:"pointer", background:"#22c55e", color:"#000", letterSpacing:1 }}>
+            ✓ COMPLETE SEGMENT {currentSeg.id}
+          </button>
+        )}
+      </div>
+
+      {/* COLLAPSIBLE: Stops & Facilities */}
+      {currentTurns && (
+        <div style={{ background:S.card, borderRadius:10, padding:10, marginBottom:6, border:`1px solid ${S.border}` }}>
+          <button
+            onClick={()=>setShowStops(!showStops)}
+            style={{ width:"100%", display:"flex", alignItems:"center", gap:8, background:"transparent", border:"none", color:S.text, cursor:"pointer", padding:0, fontFamily:"system-ui", textAlign:"left" }}
+          >
+            <span style={{ fontSize:14 }}>🚻</span>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:11, fontWeight:700 }}>Stops & Facilities</div>
+              {currentTurns.resupply && !showStops && (
+                <div style={{ fontSize:9, color:"#22c55e", marginTop:2, lineHeight:1.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>🚰 {currentTurns.resupply}</div>
+              )}
             </div>
-          )}
-
-          {/* Toilets */}
-          {currentTurns.toilets && (
-            <div style={{ marginBottom:6, padding:"8px 10px", background:"#0a0a1a", borderRadius:6, borderLeft:"3px solid #3b82f6" }}>
-              <div style={{ fontSize:8, color:"#60a5fa", fontWeight:700, marginBottom:2, letterSpacing:1, fontFamily:"system-ui" }}>🚻 TOILETS</div>
-              {currentTurns.toilets.map((t,i) => (
-                <div key={i} style={{ fontSize:10, color:"#93c5fd", fontFamily:"system-ui", lineHeight:1.4, marginTop:i?2:0 }}>• {t}</div>
-              ))}
-            </div>
-          )}
-
-          {/* Photo spots */}
-          {currentTurns.photo && (
-            <div style={{ marginBottom:6, padding:"8px 10px", background:"#1a0a1a", borderRadius:6, borderLeft:"3px solid #c084fc" }}>
-              <div style={{ fontSize:8, color:"#c084fc", fontWeight:700, marginBottom:2, letterSpacing:1, fontFamily:"system-ui" }}>📸 PHOTO SPOTS</div>
-              {currentTurns.photo.map((p,i) => (
-                <div key={i} style={{ fontSize:10, color:"#d8b4fe", fontFamily:"system-ui", lineHeight:1.4, marginTop:i?2:0 }}>• {p}</div>
-              ))}
-            </div>
-          )}
-
-          {/* Shelter (rain plan) */}
-          {currentTurns.shelter && (
-            <div style={{ padding:"8px 10px", background:"#1a1500", borderRadius:6, borderLeft:"3px solid #fbbf24" }}>
-              <div style={{ fontSize:8, color:"#fbbf24", fontWeight:700, marginBottom:2, letterSpacing:1, fontFamily:"system-ui" }}>☂️ SHELTER (rain plan)</div>
-              {currentTurns.shelter.map((s,i) => (
-                <div key={i} style={{ fontSize:10, color:"#fde68a", fontFamily:"system-ui", lineHeight:1.4, marginTop:i?2:0 }}>• {s}</div>
-              ))}
+            <span style={{ fontSize:10, color:S.mut, flexShrink:0 }}>{showStops ? "▼" : "▶"}</span>
+          </button>
+          {showStops && (
+            <div style={{ marginTop:8 }}>
+              {currentTurns.resupply && (
+                <div style={{ marginBottom:6, padding:"8px 10px", background:"#0a1a0a", borderRadius:5, borderLeft:"3px solid #22c55e" }}>
+                  <div style={{ fontSize:8, color:"#16a34a", fontWeight:700, marginBottom:2, letterSpacing:1 }}>🚰 WATER / FOOD</div>
+                  <div style={{ fontSize:10, color:"#22c55e", lineHeight:1.4 }}>{currentTurns.resupply}</div>
+                </div>
+              )}
+              {currentTurns.toilets && (
+                <div style={{ marginBottom:6, padding:"8px 10px", background:"#0a0a1a", borderRadius:5, borderLeft:"3px solid #3b82f6" }}>
+                  <div style={{ fontSize:8, color:"#60a5fa", fontWeight:700, marginBottom:2, letterSpacing:1 }}>🚻 TOILETS</div>
+                  {currentTurns.toilets.map((t,i) => (
+                    <div key={i} style={{ fontSize:10, color:"#93c5fd", lineHeight:1.4, marginTop:i?2:0 }}>• {t}</div>
+                  ))}
+                </div>
+              )}
+              {currentTurns.photo && (
+                <div style={{ marginBottom:6, padding:"8px 10px", background:"#1a0a1a", borderRadius:5, borderLeft:"3px solid #c084fc" }}>
+                  <div style={{ fontSize:8, color:"#c084fc", fontWeight:700, marginBottom:2, letterSpacing:1 }}>📸 PHOTO SPOTS</div>
+                  {currentTurns.photo.map((p,i) => (
+                    <div key={i} style={{ fontSize:10, color:"#d8b4fe", lineHeight:1.4, marginTop:i?2:0 }}>• {p}</div>
+                  ))}
+                </div>
+              )}
+              {currentTurns.shelter && (
+                <div style={{ padding:"8px 10px", background:"#1a1500", borderRadius:5, borderLeft:"3px solid #fbbf24" }}>
+                  <div style={{ fontSize:8, color:"#fbbf24", fontWeight:700, marginBottom:2, letterSpacing:1 }}>☂️ SHELTER (rain plan)</div>
+                  {currentTurns.shelter.map((s,i) => (
+                    <div key={i} style={{ fontSize:10, color:"#fde68a", lineHeight:1.4, marginTop:i?2:0 }}>• {s}</div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
-      {/* Current segment turns */}
-      <div style={{ background:S.card, borderRadius:10, padding:12, marginBottom:8, border:`1px solid ${S.border}` }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-          <div>
-            <div style={{ fontSize:9, color:S.mut, letterSpacing:2 }}>SEGMENT {currentSeg.id} / 11</div>
-            <div style={{ fontSize:13, fontWeight:700, color:S.text, fontFamily:"system-ui" }}>{currentSeg.name}</div>
-          </div>
-          <span style={{ background:currentSeg.c, color:"#fff", padding:"2px 8px", borderRadius:3, fontSize:9, fontWeight:700 }}>{currentSeg.d} · {currentSeg.km}km</span>
-        </div>
-        {currentTurns && (
-          <>
-            <div style={{ fontSize:9, color:S.mut, marginTop:8, marginBottom:4, letterSpacing:1, fontFamily:"system-ui" }}>TURN-BY-TURN</div>
-            <div style={{ fontSize:11, color:S.text, lineHeight:1.7, fontFamily:"system-ui" }}>
-              {currentTurns.steps.map((step, i) => (
-                <div key={i} style={{ display:"flex", gap:8, marginBottom:4 }}>
-                  <span style={{ color:S.acc, fontWeight:700, flexShrink:0 }}>{i+1}.</span>
-                  <span>{step}</span>
-                </div>
-              ))}
+      {/* COLLAPSIBLE: Turn-by-turn directions */}
+      {currentTurns && (
+        <div style={{ background:S.card, borderRadius:10, padding:10, marginBottom:6, border:`1px solid ${S.border}` }}>
+          <button
+            onClick={()=>setShowTurns(!showTurns)}
+            style={{ width:"100%", display:"flex", alignItems:"center", gap:8, background:"transparent", border:"none", color:S.text, cursor:"pointer", padding:0, fontFamily:"system-ui", textAlign:"left" }}
+          >
+            <span style={{ fontSize:14 }}>📋</span>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:11, fontWeight:700 }}>Turn-by-Turn</div>
+              <div style={{ fontSize:8, color:S.dim, marginTop:1 }}>{currentTurns.steps.length} steps · Fenix has audio alerts</div>
             </div>
-            {currentTurns.hazards && (
-              <div style={{ marginTop:8, padding:"6px 8px", background:"#2d1b00", borderRadius:4, fontSize:10, color:"#fbbf24", fontFamily:"system-ui" }}>{currentTurns.hazards}</div>
-            )}
-            {currentTurns.resupply && (
-              <div style={{ marginTop:4, padding:"6px 8px", background:"#0a1a0a", borderRadius:4, fontSize:10, color:"#22c55e", fontFamily:"system-ui" }}>🚰 {currentTurns.resupply}</div>
-            )}
-            {currentTurns.toilets && (
-              <div style={{ marginTop:4, padding:"6px 8px", background:"#0a0a1a", borderRadius:4, fontSize:9, color:"#93c5fd", fontFamily:"system-ui" }}>
-                🚻 {currentTurns.toilets.map((t,i) => <div key={i} style={{ marginTop:i?2:0 }}>{t}</div>)}
-              </div>
-            )}
-            {currentTurns.photo && (
-              <div style={{ marginTop:4, padding:"6px 8px", background:"#1a0a1a", borderRadius:4, fontSize:9, color:"#c084fc", fontFamily:"system-ui" }}>
-                📸 {currentTurns.photo.map((p,i) => <div key={i} style={{ marginTop:i?2:0 }}>{p}</div>)}
-              </div>
-            )}
-            {currentTurns.gmaps && (
-              <button onClick={()=>window.open(currentTurns.gmaps,"_blank")} style={{ marginTop:6, width:"100%", padding:"7px", fontSize:10, fontWeight:700, borderRadius:5, border:`1px solid ${S.border}`, background:"transparent", color:"#93c5fd", cursor:"pointer", fontFamily:"system-ui" }}>
-                🗺️ Open in Google Maps
-              </button>
-            )}
-          </>
-        )}
-        {!currentSeg.completed && state.status === "active" && (
-          <button onClick={()=>completeSeg(currentSeg.id)} style={{ width:"100%", marginTop:10, padding:"10px", fontSize:12, fontWeight:700, borderRadius:6, border:"none", cursor:"pointer", background:"#22c55e", color:"#000" }}>
-            ✓ Complete Segment {currentSeg.id}
+            <span style={{ fontSize:10, color:S.mut }}>{showTurns ? "▼" : "▶"}</span>
           </button>
+          {showTurns && (
+            <div style={{ marginTop:8 }}>
+              <div style={{ fontSize:11, color:S.text, lineHeight:1.7, fontFamily:"system-ui" }}>
+                {currentTurns.steps.map((step, i) => (
+                  <div key={i} style={{ display:"flex", gap:8, marginBottom:4 }}>
+                    <span style={{ color:S.acc, fontWeight:700, flexShrink:0 }}>{i+1}.</span>
+                    <span>{step}</span>
+                  </div>
+                ))}
+              </div>
+              {currentTurns.gmaps && (
+                <button onClick={()=>window.open(currentTurns.gmaps,"_blank")} style={{ marginTop:8, width:"100%", padding:"8px", fontSize:10, fontWeight:700, borderRadius:5, border:`1px solid ${S.border}`, background:"transparent", color:"#93c5fd", cursor:"pointer", fontFamily:"system-ui" }}>
+                  🗺️ Open in Google Maps
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* COLLAPSIBLE: Schematic mini-map */}
+      <div style={{ background:S.card, borderRadius:10, padding:10, marginBottom:6, border:`1px solid ${S.border}` }}>
+        <button
+          onClick={()=>setShowMap(!showMap)}
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:8, background:"transparent", border:"none", color:S.text, cursor:"pointer", padding:0, fontFamily:"system-ui", textAlign:"left" }}
+        >
+          <span style={{ fontSize:14 }}>🗺️</span>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:11, fontWeight:700 }}>Schematic Map</div>
+            <div style={{ fontSize:8, color:S.dim, marginTop:1 }}>Use Fenix for real navigation</div>
+          </div>
+          <span style={{ fontSize:10, color:S.mut }}>{showMap ? "▼" : "▶"}</span>
+        </button>
+        {showMap && (
+          <div style={{ marginTop:8 }}>
+            <RouteMap state={state} lastGps={lastGps} gpsTracking={gpsTracking} highlightWp={nextWp} brightness={brightness} />
+          </div>
         )}
       </div>
 
-      {/* Mini map */}
-      <div style={{ background:S.card, borderRadius:10, padding:10, border:`1px solid ${S.border}` }}>
-        <RouteMap state={state} lastGps={lastGps} gpsTracking={gpsTracking} highlightWp={nextWp} brightness={brightness} />
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:4, marginTop:6 }}>
-          <StatBox l="Elapsed" v={fmtTime(elapsed)} c={S.text} />
-          <StatBox l="Done" v={`${kmDone}km`} c="#22c55e" />
-          <StatBox l="Left" v={`${kmLeft}km`} c="#f97316" />
-          <StatBox l="Pace" v={`${fmtPace(kmDone,elapsed)} km/h`} c="#3b82f6" />
-        </div>
-      </div>
-
-      {/* Quick controls */}
+      {/* QUICK CONTROLS — pause / GPS / Wake */}
       <div style={{ display:"flex", gap:4, marginTop:8 }}>
         {state.status === "active" && <Btn onClick={pauseRide} bg="#eab308" text="⏸ Pause" />}
         {state.status === "paused" && <Btn onClick={resumeRide} bg="#22c55e" text="▶ Resume" />}
