@@ -173,6 +173,7 @@ const SG = "M18,118 L24,135 L44,144 L78,142 L109,136 L135,140 L166,136 L192,136 
 
 const STORAGE_KEY = "rti-tracker-v4";
 const CHAT_KEY = "rti-chat-shared-v1";
+const GARMIN_COURSE_EMBED = "https://connect.garmin.com/app/course/embed/446685371";
 const CHAT_NAME_KEY = "rti-chat-name";
 
 const fmtTime = (ms) => {
@@ -668,8 +669,28 @@ function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullsc
         </div>
       )}
 
-      {/* Route Map */}
+      {/* Garmin Course Map (real route) */}
       <div style={{ background:S.card, borderRadius:10, padding:10, border:`1px solid ${S.border}`, marginBottom:8 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
+          <span style={{ fontSize:14 }}>🗺️</span>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:S.text, fontFamily:"system-ui" }}>Planned Route</div>
+            <div style={{ fontSize:8, color:S.dim, fontFamily:"system-ui" }}>Source of truth — same course on Fenix 6S</div>
+          </div>
+          <button onClick={()=>window.open(GARMIN_COURSE_EMBED.replace("/embed/","/"),"_blank")} style={{ padding:"4px 8px", fontSize:8, fontWeight:700, borderRadius:4, border:`1px solid ${S.border}`, background:"transparent", color:S.mut, cursor:"pointer", fontFamily:"system-ui" }}>Garmin ↗</button>
+        </div>
+        <div style={{ position:"relative", width:"100%", paddingBottom:"117.8%", borderRadius:8, overflow:"hidden", background:"#0a0f1a" }}>
+          <iframe
+            src={GARMIN_COURSE_EMBED}
+            style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", border:"none" }}
+            title="Garmin Course"
+          />
+        </div>
+      </div>
+
+      {/* Schematic Route Map (with rider dot) */}
+      <div style={{ background:S.card, borderRadius:10, padding:10, border:`1px solid ${S.border}`, marginBottom:8 }}>
+        <div style={{ fontSize:9, color:S.mut, marginBottom:6, letterSpacing:1, fontFamily:"system-ui" }}>SCHEMATIC + LIVE POSITION</div>
         <RouteMap state={{ segments, gpsPoints: [] }} lastGps={riderGps || null} gpsTracking={!!riderGps} highlightWp={null} brightness={brightness} />
         {riderGps && (
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:6, padding:"4px 8px", background:"#0a1a0a", borderRadius:4 }}>
