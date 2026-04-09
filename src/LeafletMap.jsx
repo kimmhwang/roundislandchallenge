@@ -2,6 +2,11 @@ import { useEffect, useState, useRef } from "react";
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
+// Singapore bounds (with ~1.5x surrounding buffer to allow slight panning)
+// SG approx bounds: lat 1.15-1.50, lng 103.55-104.10
+// Buffered to ~1.5x: lat 1.00-1.65, lng 103.35-104.30
+const SG_BOUNDS = [[1.00, 103.35], [1.65, 104.30]];
+
 // Fit map to route bounds once route loads
 function FitBounds({ points }) {
   const map = useMap();
@@ -76,10 +81,14 @@ export default function LeafletMap({ riderGps, segments, kmDone, brightness, hei
       <MapContainer
         center={[1.355, 103.82]}
         zoom={11}
+        minZoom={10}
+        maxZoom={18}
+        maxBounds={SG_BOUNDS}
+        maxBoundsViscosity={1.0}
         style={{ height:"100%", width:"100%" }}
         scrollWheelZoom={true}
       >
-        <TileLayer url={tileUrl} attribution={tileAttribution} subdomains="abcd" maxZoom={20} />
+        <TileLayer url={tileUrl} attribution={tileAttribution} subdomains="abcd" maxZoom={18} bounds={SG_BOUNDS} />
         <FitBounds points={routePoints} />
 
         {/* Remaining route — blue */}

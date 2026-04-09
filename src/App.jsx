@@ -193,7 +193,35 @@ const SG = "M18,118 L24,135 L44,144 L78,142 L109,136 L135,140 L166,136 L192,136 
 const STORAGE_KEY = "rti-tracker-v4";
 const CHAT_KEY = "rti-chat-shared-v1";
 const GARMIN_COURSE_EMBED = "https://connect.garmin.com/app/course/embed/446685371";
+const GARMIN_COURSE_URL = "https://connect.garmin.com/modern/course/446685371";
 const CHAT_NAME_KEY = "rti-chat-name";
+const ATTEMPTS_KEY = "rti-attempts-v1";
+
+// ===== Attempts helpers =====
+const loadAttempts = () => {
+  try { return JSON.parse(localStorage.getItem(ATTEMPTS_KEY) || "[]"); } catch(e) { return []; }
+};
+const saveAttempts = (attempts) => {
+  try { localStorage.setItem(ATTEMPTS_KEY, JSON.stringify(attempts)); } catch(e) {}
+};
+const snapshotAttempt = (state, name, elapsed, kmDone) => {
+  const attempts = loadAttempts();
+  const attempt = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name: name || `Attempt ${attempts.length + 1}`,
+    createdAt: Date.now(),
+    state: JSON.parse(JSON.stringify(state)),
+    elapsed,
+    kmDone,
+    segsDone: state.segments.filter(s => s.completed).length,
+    status: state.status,
+  };
+  saveAttempts([...attempts, attempt]);
+  return attempt;
+};
+const deleteAttempt = (id) => {
+  saveAttempts(loadAttempts().filter(a => a.id !== id));
+};
 
 const fmtTime = (ms) => {
   if (!ms || ms < 0) return "00:00:00";
@@ -284,6 +312,7 @@ export default function App() {
   const [brightness, setBrightness] = useState("normal");
   const [showGuide, setShowGuide] = useState(false);
   const [riderMode, setRiderMode] = useState(() => sessionStorage.getItem("rti-rider") === "1");
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const timerRef = useRef(null);
   const watchRef = useRef(null);
   const gpsSyncRef = useRef(null);
@@ -440,8 +469,32 @@ export default function App() {
     if (ns.status === "finished") ns.status = "active";
     setState(ns); save(ns);
   };
-  const resetRide = async (clearChat = false) => {
-    if (!confirm(clearChat ? "FULL RESET: Clear ride state, GPS, and ALL chat messages? This cannot be undone." : "Reset ride state? Chat messages will be kept.")) return;
+  const saveAsAttempt = (name) => {
+    if (state.status === "idle") { alert("Nothing to save — no ride in progress."); return null; }
+    const snap = snapshotAttempt(state, name, elapsed(), kmDone);
+    return snap;
+  };
+
+  const loadAttemptById = (id) => {
+    const attempts = loadAttempts();
+    const a = attempts.find(x => x.id === id);
+    if (!a) return;
+    if (!confirm(`Load "${a.name}"? Current ride state will be discarded.`)) return;
+    setState(a.state);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(a.state)); } catch(e) {}
+    save(a.state); // sync to Supabase
+  };
+
+  const resetRide = async (mode = "reset") => {
+    // mode: "reset" (just clear), "save" (save as attempt first), "full" (clear + chat)
+    if (mode === "save") {
+      const name = prompt("Name this attempt:", `Attempt ${loadAttempts().length + 1}`);
+      if (name === null) return; // cancelled
+      saveAsAttempt(name);
+    } else {
+      const msg = mode === "full" ? "FULL RESET: Clear ride state, GPS, and ALL chat messages? This cannot be undone." : "Reset ride state? (Chat & attempts kept)";
+      if (!confirm(msg)) return;
+    }
     setGpsTracking(false); setLastGps(null);
     await releaseWakeLock();
     const ns = initState();
@@ -467,7 +520,7 @@ export default function App() {
         updated_at: new Date().toISOString(),
       });
     } catch(e) {}
-    if (clearChat) {
+    if (mode === "full") {
       try { await sb.del("rti_chat", "ride_id=eq.current"); } catch(e) {}
     }
   };
@@ -490,14 +543,19 @@ export default function App() {
     ? { bg:"#000000", card:"#0a0a0a", border:"#1a1a1a", acc:"#ef4444", text:"#f87171", mut:"#991b1b", dim:"#7f1d1d" }
     : { bg:"#050a12", card:"#111827", border:"#1f2937", acc:"#3b82f6", text:"#f3f4f6", mut:"#9ca3af", dim:"#6b7280" };
 
-  const tabs = [
+  // Primary tabs — essential while riding (big buttons)
+  const primaryTabs = [
     { id:"nav", l:"Nav", em:"🧭" },
     { id:"tracker", l:"Track", em:"🚴" },
-    { id:"map", l:"Map+Chat", em:"🗺️" },
+    { id:"map", l:"Chat", em:"💬" },
+  ];
+  // Secondary tabs — resting-only, accessed via overflow menu
+  const secondaryTabs = [
     { id:"sync", l:"Sync", em:"📡" },
     { id:"cards", l:"Cards", em:"📸" },
     { id:"share", l:"Share", em:"🔗" },
   ];
+  const tabs = [...primaryTabs, ...secondaryTabs];
 
   const dateInfo = state.dateOption ? DATE_INFO[state.dateOption] : null;
   const currentTurns = TURNS[currentSeg.id];
@@ -546,9 +604,28 @@ export default function App() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display:"flex", gap:2, marginBottom:8 }}>
-        {tabs.map(t => <button key={t.id} onClick={()=>setTab(t.id)} style={{ flex:1, padding:"6px 2px", fontSize:9, fontWeight:700, borderRadius:5, border:"none", cursor:"pointer", background:tab===t.id?S.acc:S.card, color:tab===t.id?"#fff":S.mut }}>{t.em}<br/>{t.l}</button>)}
+      {/* Tabs — primary big + More overflow */}
+      <div style={{ display:"flex", gap:3, marginBottom:8, position:"relative" }}>
+        {primaryTabs.map(t => (
+          <button key={t.id} onClick={()=>{setTab(t.id); setShowMoreMenu(false);}} style={{ flex:1, padding:"12px 4px", fontSize:11, fontWeight:800, borderRadius:8, border:"none", cursor:"pointer", background:tab===t.id?S.acc:S.card, color:tab===t.id?"#fff":S.mut, letterSpacing:0.5 }}>
+            <div style={{ fontSize:18, marginBottom:2 }}>{t.em}</div>
+            {t.l}
+          </button>
+        ))}
+        <button onClick={()=>setShowMoreMenu(!showMoreMenu)} style={{ flex:1, padding:"12px 4px", fontSize:11, fontWeight:800, borderRadius:8, border:"none", cursor:"pointer", background:secondaryTabs.some(t=>t.id===tab)?S.acc:S.card, color:secondaryTabs.some(t=>t.id===tab)?"#fff":S.mut, letterSpacing:0.5 }}>
+          <div style={{ fontSize:18, marginBottom:2 }}>☰</div>
+          More
+        </button>
+        {showMoreMenu && (
+          <div style={{ position:"absolute", top:"calc(100% + 4px)", right:0, background:S.card, borderRadius:8, border:`1px solid ${S.border}`, padding:4, zIndex:100, boxShadow:"0 4px 12px rgba(0,0,0,0.4)", minWidth:120 }}>
+            {secondaryTabs.map(t => (
+              <button key={t.id} onClick={()=>{setTab(t.id); setShowMoreMenu(false);}} style={{ width:"100%", padding:"10px 14px", fontSize:11, fontWeight:700, borderRadius:5, border:"none", cursor:"pointer", background:tab===t.id?S.acc:"transparent", color:tab===t.id?"#fff":S.text, textAlign:"left", display:"flex", alignItems:"center", gap:8, fontFamily:"system-ui" }}>
+                <span style={{ fontSize:16 }}>{t.em}</span>
+                {t.l}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ===== NAV ===== */}
@@ -558,7 +635,7 @@ export default function App() {
 
       {/* ===== TRACKER ===== */}
       {tab === "tracker" && (
-        <TrackerTab state={state} startRide={startRide} pauseRide={pauseRide} resumeRide={resumeRide} resetRide={resetRide} completeSeg={completeSeg} undoSeg={undoSeg} addNote={addNote} elapsed={elapsed()} kmDone={kmDone} kmLeft={kmLeft} pct={pct} S={S} />
+        <TrackerTab state={state} startRide={startRide} pauseRide={pauseRide} resumeRide={resumeRide} resetRide={resetRide} loadAttemptById={loadAttemptById} completeSeg={completeSeg} undoSeg={undoSeg} addNote={addNote} elapsed={elapsed()} kmDone={kmDone} kmLeft={kmLeft} pct={pct} S={S} />
       )}
 
       {/* ===== MAP + CHAT ===== */}
@@ -600,12 +677,25 @@ export default function App() {
 // ==========================================================================
 // OBSERVER VIEW (Public)
 // ==========================================================================
+// Adventure/cyclist theme palette (warmer, outdoor-inspired)
+const ADV = {
+  bg: "#0f1419",           // deep slate
+  card: "#1a2332",         // card bg
+  border: "#2d3e52",       // borders
+  accent: "#f59e0b",       // amber sunrise
+  accent2: "#ea580c",      // orange trail
+  text: "#f5f5f4",         // warm white
+  mut: "#a8a29e",          // warm grey
+  dim: "#78716c",          // dimmer warm grey
+  success: "#65a30d",      // forest green
+  route: "#0891b2",        // cyan trail
+};
+
 function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullscreen, unlockRider }) {
   const [ride, setRide] = useState(null);
   const [pinInput, setPinInput] = useState("");
   const [showPin, setShowPin] = useState(false);
   const [pinError, setPinError] = useState(false);
-  const [showGarminFallback, setShowGarminFallback] = useState(false);
 
   // Poll Supabase for ride state
   useEffect(() => {
@@ -645,51 +735,70 @@ function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullsc
   };
 
   return (
-    <div>
-      {/* Header */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, padding:"5px 8px", background:S.card, borderRadius:6, border:`1px solid ${S.border}`, fontSize:9 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-          <div style={{ width:8, height:8, borderRadius:"50%", background: status==="active"?"#22c55e":status==="paused"?"#eab308":status==="finished"?"#3b82f6":"#6b7280" }} />
-          <span style={{ color:S.mut, textTransform:"uppercase", letterSpacing:2 }}>
-            {status === "idle" ? "Waiting" : status === "active" ? "Live" : status === "paused" ? "Paused" : "Finished"}
-          </span>
+    <div style={{ background:ADV.bg, minHeight:"100vh", margin:-10, padding:10 }}>
+      {/* HEADER — Adventure theme */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10, padding:"8px 12px", background:`linear-gradient(135deg, ${ADV.card}, ${ADV.bg})`, borderRadius:8, border:`1px solid ${ADV.border}`, fontSize:10 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:14 }}>🚴</span>
+          <div>
+            <div style={{ fontSize:11, fontWeight:800, color:ADV.text, fontFamily:"system-ui", letterSpacing:0.5 }}>ROUND ISLAND TRACKER</div>
+            <div style={{ display:"flex", alignItems:"center", gap:4, marginTop:1 }}>
+              <div style={{ width:6, height:6, borderRadius:"50%", background: status==="active"?ADV.success:status==="paused"?ADV.accent:status==="finished"?ADV.route:"#78716c" }} />
+              <span style={{ color:ADV.mut, fontSize:8, letterSpacing:1, textTransform:"uppercase" }}>
+                {status === "idle" ? "Waiting" : status === "active" ? "Live" : status === "paused" ? "Paused" : "Finished"}
+              </span>
+            </div>
+          </div>
         </div>
         <div style={{ display:"flex", gap:4 }}>
-          <button onClick={()=>setBrightness(brightness==="night"?"normal":"night")} style={{ padding:"3px 6px", fontSize:8, border:"none", borderRadius:3, background:brightness==="night"?"#7f1d1d":"#374151", color:"#fff", cursor:"pointer" }}>{brightness==="night"?"☀️":"🌙"}</button>
-          <button onClick={toggleFullscreen} style={{ padding:"3px 6px", fontSize:8, border:"none", borderRadius:3, background:"#374151", color:"#fff", cursor:"pointer" }}>{isFullscreen?"⤓":"⤢"}</button>
+          <button onClick={()=>setBrightness(brightness==="night"?"normal":"night")} style={{ padding:"4px 8px", fontSize:9, border:`1px solid ${ADV.border}`, borderRadius:4, background:brightness==="night"?ADV.accent2:"transparent", color:ADV.text, cursor:"pointer" }}>{brightness==="night"?"☀️":"🌙"}</button>
+          <button onClick={toggleFullscreen} style={{ padding:"4px 8px", fontSize:9, border:`1px solid ${ADV.border}`, borderRadius:4, background:"transparent", color:ADV.text, cursor:"pointer" }}>{isFullscreen?"⤓":"⤢"}</button>
         </div>
       </div>
 
-      {/* Live Progress */}
-      <div style={{ background:"linear-gradient(135deg,#0f172a,#1e1b4b)", borderRadius:12, padding:16, border:"1px solid #312e81", marginBottom:10 }}>
-        <div style={{ textAlign:"center" }}>
-          <div style={{ fontSize:10, letterSpacing:3, color:"#818cf8", fontWeight:700, marginBottom:2, fontFamily:"system-ui" }}>LIVE PROGRESS</div>
-          <h2 style={{ fontSize:18, fontWeight:800, margin:"0 0 2px", fontFamily:"system-ui", color:S.text }}>SG Round Island</h2>
-          <div style={{ fontSize:9, color:"#a5b4fc", marginBottom:12, fontFamily:"system-ui" }}>{dateInfo ? `${dateInfo.label} · Blitz · ${dateInfo.day}` : "Not started"}</div>
+      {/* HERO: Live Progress (adventure theme) */}
+      <div style={{ background:`linear-gradient(135deg, #1a2332 0%, #2d3e52 50%, #1a2332 100%)`, borderRadius:14, padding:18, border:`1px solid ${ADV.accent}33`, marginBottom:10, position:"relative", overflow:"hidden" }}>
+        {/* Subtle topo pattern */}
+        <div style={{ position:"absolute", inset:0, opacity:0.04, backgroundImage:"radial-gradient(circle at 20% 50%, #f59e0b 0%, transparent 40%), radial-gradient(circle at 80% 80%, #ea580c 0%, transparent 30%)" }} />
+        <div style={{ textAlign:"center", position:"relative" }}>
+          <div style={{ fontSize:9, letterSpacing:4, color:ADV.accent, fontWeight:800, marginBottom:2, fontFamily:"system-ui" }}>⛰️ LIVE PROGRESS</div>
+          <h2 style={{ fontSize:20, fontWeight:800, margin:"0 0 2px", fontFamily:"system-ui", color:ADV.text, letterSpacing:0.5 }}>SG Round Island 🇸🇬</h2>
+          <div style={{ fontSize:9, color:ADV.mut, marginBottom:14, fontFamily:"system-ui" }}>{dateInfo ? `${dateInfo.label} · Blitz Ride · ${dateInfo.day}` : "Ride not started yet"}</div>
 
           {/* Progress ring */}
-          <div style={{ position:"relative", width:120, height:120, margin:"0 auto 12px" }}>
+          <div style={{ position:"relative", width:130, height:130, margin:"0 auto 14px" }}>
             <svg viewBox="0 0 100 100" style={{ width:"100%", height:"100%", transform:"rotate(-90deg)" }}>
-              <circle cx="50" cy="50" r="42" fill="none" stroke="#1f2937" strokeWidth="6" />
-              <circle cx="50" cy="50" r="42" fill="none" stroke="url(#ograd)" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${2*Math.PI*42*kmDone/TOTAL_KM} ${2*Math.PI*42}`} />
-              <defs><linearGradient id="ograd" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#22c55e" /><stop offset="100%" stopColor="#3b82f6" /></linearGradient></defs>
+              <circle cx="50" cy="50" r="42" fill="none" stroke={ADV.border} strokeWidth="7" />
+              <circle cx="50" cy="50" r="42" fill="none" stroke="url(#ograd)" strokeWidth="7" strokeLinecap="round" strokeDasharray={`${2*Math.PI*42*kmDone/TOTAL_KM} ${2*Math.PI*42}`} />
+              <defs><linearGradient id="ograd" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor={ADV.accent} /><stop offset="100%" stopColor={ADV.accent2} /></linearGradient></defs>
             </svg>
             <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", textAlign:"center" }}>
-              <div style={{ fontSize:24, fontWeight:800, color:S.text }}>{pct}%</div>
-              <div style={{ fontSize:7, color:S.dim }}>COMPLETE</div>
+              <div style={{ fontSize:28, fontWeight:800, color:ADV.text }}>{pct}%</div>
+              <div style={{ fontSize:7, color:ADV.accent, letterSpacing:1, fontWeight:700 }}>COMPLETE</div>
             </div>
           </div>
 
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
-            <StatBox l="Distance" v={`${kmDone}/${TOTAL_KM}`} c="#22c55e" />
-            <StatBox l="Segments" v={`${segsDone}/11`} c="#3b82f6" />
-            <StatBox l="Status" v={status === "active" ? "Riding" : status === "paused" ? "Rest" : status === "finished" ? "Done!" : "Prep"} c="#eab308" />
+            <div style={{ textAlign:"center", background:"rgba(0,0,0,0.25)", borderRadius:6, padding:"6px 3px", border:`1px solid ${ADV.border}` }}>
+              <div style={{ fontSize:12, fontWeight:800, color:ADV.accent }}>{kmDone}/{TOTAL_KM}</div>
+              <div style={{ fontSize:7, color:ADV.mut, letterSpacing:1 }}>KILOMETRES</div>
+            </div>
+            <div style={{ textAlign:"center", background:"rgba(0,0,0,0.25)", borderRadius:6, padding:"6px 3px", border:`1px solid ${ADV.border}` }}>
+              <div style={{ fontSize:12, fontWeight:800, color:ADV.success }}>{segsDone}/11</div>
+              <div style={{ fontSize:7, color:ADV.mut, letterSpacing:1 }}>SEGMENTS</div>
+            </div>
+            <div style={{ textAlign:"center", background:"rgba(0,0,0,0.25)", borderRadius:6, padding:"6px 3px", border:`1px solid ${ADV.border}` }}>
+              <div style={{ fontSize:12, fontWeight:800, color:ADV.route }}>{status === "active" ? "RIDING" : status === "paused" ? "REST" : status === "finished" ? "DONE!" : "PREP"}</div>
+              <div style={{ fontSize:7, color:ADV.mut, letterSpacing:1 }}>STATUS</div>
+            </div>
           </div>
 
-          {(liveTrackUrl || stravaUrl) && (
-            <div style={{ display:"flex", gap:5, marginTop:10, justifyContent:"center" }}>
-              {liveTrackUrl && <button onClick={()=>window.open(liveTrackUrl,"_blank")} style={{ padding:"5px 10px", fontSize:9, fontWeight:700, borderRadius:5, border:"1px solid #3b82f6", background:"transparent", color:"#3b82f6", cursor:"pointer" }}>LiveTrack</button>}
-              {stravaUrl && <button onClick={()=>window.open(stravaUrl,"_blank")} style={{ padding:"5px 10px", fontSize:9, fontWeight:700, borderRadius:5, border:"1px solid #fc4c02", background:"transparent", color:"#fc4c02", cursor:"pointer" }}>Strava</button>}
+          {/* Current speed badge if live */}
+          {riderGps && riderGps.speed > 0 && (
+            <div style={{ marginTop:10, display:"inline-block", padding:"6px 14px", background:`${ADV.accent}22`, border:`1px solid ${ADV.accent}`, borderRadius:20 }}>
+              <span style={{ fontSize:9, color:ADV.mut, letterSpacing:1 }}>CURRENT SPEED</span>
+              <span style={{ fontSize:18, fontWeight:800, color:ADV.accent, marginLeft:8, fontVariantNumeric:"tabular-nums" }}>{riderGps.speed.toFixed(0)}</span>
+              <span style={{ fontSize:9, color:ADV.mut, marginLeft:2 }}>km/h</span>
             </div>
           )}
         </div>
@@ -697,18 +806,18 @@ function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullsc
 
       {/* YouTube Live Stream — Burst Mode */}
       {ytEmbed && (
-        <div style={{ background:S.card, borderRadius:10, padding:10, border:`2px solid ${streamLive ? "#ef4444" : S.border}`, marginBottom:8 }}>
+        <div style={{ background:ADV.card, borderRadius:10, padding:10, border:`2px solid ${streamLive ? "#ef4444" : ADV.border}`, marginBottom:10 }}>
           <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
             <span style={{ fontSize:14 }}>📺</span>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:11, fontWeight:700, color:S.text, fontFamily:"system-ui" }}>Live Stream</div>
+              <div style={{ fontSize:11, fontWeight:700, color:ADV.text, fontFamily:"system-ui" }}>Live Stream</div>
               {streamLive ? (
                 <div style={{ fontSize:8, color:"#ef4444", fontWeight:700, fontFamily:"system-ui" }}>● LIVE NOW</div>
               ) : (
-                <div style={{ fontSize:8, color:S.dim, fontFamily:"system-ui" }}>Stream offline — rider goes live at key moments</div>
+                <div style={{ fontSize:8, color:ADV.dim, fontFamily:"system-ui" }}>Stream offline — rider goes live at key moments</div>
               )}
             </div>
-            <button onClick={()=>window.open(youtubeStreamUrl,"_blank")} style={{ padding:"4px 8px", fontSize:8, fontWeight:700, borderRadius:4, border:`1px solid ${S.border}`, background:"transparent", color:S.mut, cursor:"pointer", fontFamily:"system-ui" }}>YouTube ↗</button>
+            <button onClick={()=>window.open(youtubeStreamUrl,"_blank")} style={{ padding:"4px 8px", fontSize:8, fontWeight:700, borderRadius:4, border:`1px solid ${ADV.border}`, background:"transparent", color:ADV.mut, cursor:"pointer", fontFamily:"system-ui" }}>YouTube ↗</button>
           </div>
           {streamLive ? (
             <div style={{ position:"relative", width:"100%", paddingBottom:"56.25%", borderRadius:8, overflow:"hidden", background:"#000" }}>
@@ -720,103 +829,123 @@ function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullsc
               />
             </div>
           ) : (
-            <div style={{ background:"#0a0f1a", borderRadius:8, padding:16, textAlign:"center" }}>
+            <div style={{ background:ADV.bg, borderRadius:8, padding:16, textAlign:"center", border:`1px dashed ${ADV.border}` }}>
               <div style={{ fontSize:24, marginBottom:6 }}>📡</div>
-              <div style={{ fontSize:10, color:S.dim, fontFamily:"system-ui" }}>Stream is offline right now</div>
-              <div style={{ fontSize:8, color:S.dim, fontFamily:"system-ui", marginTop:4 }}>Rider goes live in bursts at checkpoints — check back soon!</div>
-              <button onClick={()=>window.open(youtubeStreamUrl,"_blank")} style={{ marginTop:8, padding:"6px 12px", fontSize:9, fontWeight:700, borderRadius:5, border:`1px solid ${S.border}`, background:"transparent", color:S.mut, cursor:"pointer", fontFamily:"system-ui" }}>Watch past streams on YouTube ↗</button>
+              <div style={{ fontSize:10, color:ADV.mut, fontFamily:"system-ui" }}>Stream offline right now</div>
+              <div style={{ fontSize:8, color:ADV.dim, fontFamily:"system-ui", marginTop:4 }}>Rider goes live at checkpoints — check back soon!</div>
             </div>
           )}
         </div>
       )}
 
-      {/* PRIMARY: Leaflet Map (route + rider dot in one view) */}
-      <div style={{ background:S.card, borderRadius:10, padding:10, border:`1px solid ${S.border}`, marginBottom:8 }}>
+      {/* CYCLING DASHBOARD — speed, distance, status above map */}
+      <div style={{ background:`linear-gradient(135deg, #0f1419, #1a2332)`, borderRadius:10, padding:"12px 10px", border:`1px solid ${ADV.accent}44`, marginBottom:8, display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
+        <div style={{ textAlign:"center", borderRight:`1px solid ${ADV.border}` }}>
+          <div style={{ fontSize:7, color:ADV.mut, letterSpacing:2, marginBottom:2, fontFamily:"system-ui" }}>⚡ SPEED</div>
+          <div style={{ fontSize:28, fontWeight:800, color: riderGps?.speed > 0 ? ADV.accent : ADV.dim, fontVariantNumeric:"tabular-nums", lineHeight:1, fontFamily:"system-ui" }}>
+            {riderGps?.speed > 0 ? riderGps.speed.toFixed(0) : "—"}
+          </div>
+          <div style={{ fontSize:7, color:ADV.mut, marginTop:2 }}>km/h</div>
+        </div>
+        <div style={{ textAlign:"center", borderRight:`1px solid ${ADV.border}` }}>
+          <div style={{ fontSize:7, color:ADV.mut, letterSpacing:2, marginBottom:2, fontFamily:"system-ui" }}>📏 DISTANCE</div>
+          <div style={{ fontSize:28, fontWeight:800, color:ADV.success, fontVariantNumeric:"tabular-nums", lineHeight:1, fontFamily:"system-ui" }}>
+            {kmDone}
+          </div>
+          <div style={{ fontSize:7, color:ADV.mut, marginTop:2 }}>of {TOTAL_KM} km</div>
+        </div>
+        <div style={{ textAlign:"center" }}>
+          <div style={{ fontSize:7, color:ADV.mut, letterSpacing:2, marginBottom:2, fontFamily:"system-ui" }}>🏁 STATUS</div>
+          <div style={{ fontSize:14, fontWeight:800, color:ADV.route, lineHeight:1.1, fontFamily:"system-ui", marginTop:6 }}>
+            {status === "active" ? "LIVE" : status === "paused" ? "RESTING" : status === "finished" ? "DONE!" : "WAITING"}
+          </div>
+          <div style={{ fontSize:7, color:ADV.mut, marginTop:4 }}>{segsDone}/11 segs</div>
+        </div>
+      </div>
+
+      {/* PRIMARY: Leaflet Map — locked to SG */}
+      <div style={{ background:ADV.card, borderRadius:10, padding:10, border:`1px solid ${ADV.border}`, marginBottom:10 }}>
         <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
           <span style={{ fontSize:14 }}>🗺️</span>
           <div style={{ flex:1 }}>
-            <div style={{ fontSize:11, fontWeight:700, color:S.text, fontFamily:"system-ui" }}>Live Route Map</div>
-            <div style={{ fontSize:8, color:S.dim, fontFamily:"system-ui" }}>
-              <span style={{ color:"#22c55e" }}>● Completed</span> · <span style={{ color:"#3b82f6" }}>● Remaining</span>
-              {riderGps && <> · <span style={{ color:"#ec4899" }}>● Rider</span></>}
+            <div style={{ fontSize:11, fontWeight:700, color:ADV.text, fontFamily:"system-ui" }}>Live Route Map</div>
+            <div style={{ fontSize:8, color:ADV.mut, fontFamily:"system-ui" }}>
+              <span style={{ color:ADV.success }}>● Done</span> · <span style={{ color:ADV.route }}>● Remaining</span>
+              {riderGps && <> · <span style={{ color:ADV.accent }}>● Rider</span></>}
             </div>
           </div>
+          <button onClick={()=>window.open(`https://connect.garmin.com/modern/course/446685371`,"_blank")} style={{ padding:"4px 10px", fontSize:9, fontWeight:700, borderRadius:4, border:`1px solid ${ADV.border}`, background:"transparent", color:ADV.mut, cursor:"pointer", fontFamily:"system-ui" }}>View Route ↗</button>
         </div>
         <LeafletMap riderGps={riderGps} segments={segments} kmDone={kmDone} brightness={brightness} height={420} />
         {riderGps && (
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:6, padding:"4px 8px", background:"#0a1a0a", borderRadius:4 }}>
-            <div style={{ fontSize:8, color:"#22c55e", fontFamily:"system-ui" }}>
-              📍 Rider position updated {riderGps.t ? `${Math.round((Date.now() - riderGps.t) / 1000)}s ago` : ""}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:6, padding:"5px 10px", background:"rgba(101, 163, 13, 0.15)", borderRadius:4, border:`1px solid ${ADV.success}33` }}>
+            <div style={{ fontSize:9, color:ADV.success, fontFamily:"system-ui", fontWeight:700 }}>
+              📍 Updated {riderGps.t ? `${Math.round((Date.now() - riderGps.t) / 1000)}s ago` : ""}
               {riderGps.speed > 0 && ` · ${riderGps.speed.toFixed(0)} km/h`}
             </div>
-            <div style={{ fontSize:7, color:S.dim, fontFamily:"system-ui" }}>~30s refresh</div>
+            <div style={{ fontSize:7, color:ADV.mut, fontFamily:"system-ui" }}>~30s refresh</div>
           </div>
-        )}
-        {liveTrackUrl && (
-          <button onClick={()=>window.open(liveTrackUrl,"_blank")} style={{ width:"100%", marginTop:6, padding:"8px", fontSize:10, fontWeight:700, borderRadius:6, border:"1px solid #3b82f6", background:"#3b82f611", color:"#3b82f6", cursor:"pointer", fontFamily:"system-ui" }}>
-            ⌚ Open Garmin LiveTrack — real-time GPS ↗
-          </button>
         )}
       </div>
 
-      {/* FALLBACK: Garmin Connect iframe (collapsible) */}
-      <div style={{ background:S.card, borderRadius:10, padding:10, border:`1px solid ${S.border}`, marginBottom:8 }}>
-        <button
-          onClick={()=>setShowGarminFallback(!showGarminFallback)}
-          style={{ width:"100%", display:"flex", alignItems:"center", gap:6, background:"transparent", border:"none", color:S.text, cursor:"pointer", padding:0, fontFamily:"system-ui" }}
-        >
-          <span style={{ fontSize:14 }}>📋</span>
-          <div style={{ flex:1, textAlign:"left" }}>
-            <div style={{ fontSize:11, fontWeight:700 }}>Garmin Connect View</div>
-            <div style={{ fontSize:8, color:S.dim }}>Official course page with elevation profile</div>
-          </div>
-          <span style={{ fontSize:10, color:S.mut }}>{showGarminFallback ? "▼" : "▶"}</span>
+      {/* SINGLE prominent LiveTrack button */}
+      {liveTrackUrl && (
+        <button onClick={()=>window.open(liveTrackUrl,"_blank")} style={{ width:"100%", padding:"14px", fontSize:12, fontWeight:800, borderRadius:10, border:`2px solid ${ADV.accent}`, background:`linear-gradient(135deg, ${ADV.accent}22, ${ADV.accent2}22)`, color:ADV.accent, cursor:"pointer", fontFamily:"system-ui", marginBottom:10, letterSpacing:0.5 }}>
+          ⌚ GARMIN LIVETRACK — REAL-TIME GPS ↗
         </button>
-        {showGarminFallback && (
-          <div style={{ marginTop:8, position:"relative", width:"100%", paddingBottom:"117.8%", borderRadius:8, overflow:"hidden", background:"#0a0f1a" }}>
-            <iframe
-              src={GARMIN_COURSE_EMBED}
-              style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", border:"none" }}
-              title="Garmin Course"
-            />
-          </div>
-        )}
-      </div>
+      )}
 
-      {/* Segment progress bar */}
-      <div style={{ background:S.card, borderRadius:8, padding:10, border:`1px solid ${S.border}`, marginBottom:8 }}>
-        <div style={{ display:"flex", height:22, borderRadius:5, overflow:"hidden", marginBottom:4 }}>
+      {/* COMBINED: Segment progress bar (horizontal, with all info inline) */}
+      <div style={{ background:ADV.card, borderRadius:10, padding:12, border:`1px solid ${ADV.border}`, marginBottom:10 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+          <div style={{ fontSize:10, fontWeight:700, color:ADV.accent, letterSpacing:2, fontFamily:"system-ui" }}>🏁 SEGMENTS</div>
+          <div style={{ fontSize:9, color:ADV.mut, fontFamily:"system-ui" }}>{kmDone}/{TOTAL_KM} km · {pct}%</div>
+        </div>
+        {/* Segment bar with labels inline */}
+        <div style={{ display:"flex", height:36, borderRadius:6, overflow:"hidden", marginBottom:6, border:`1px solid ${ADV.border}` }}>
           {segments.map((s,i) => (
-            <div key={i} style={{ flex:s.km, background:s.completed ? s.c : "#1f2937", display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <span style={{ fontSize:7, color:s.completed?"#fff":"#4b5563", fontWeight:700 }}>{s.km}</span>
+            <div key={i} title={`${s.name} · ${s.km}km${s.completedAt?` · ${fmtClock(s.completedAt)}`:""}`} style={{ flex:s.km, background:s.completed ? s.c : ADV.bg, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", borderRight: i < segments.length-1 ? `1px solid ${ADV.border}` : "none", position:"relative" }}>
+              <span style={{ fontSize:9, color:s.completed?"#fff":ADV.dim, fontWeight:800 }}>{s.id}</span>
+              <span style={{ fontSize:6, color:s.completed?"rgba(255,255,255,0.85)":ADV.dim, marginTop:1 }}>{s.km}k</span>
             </div>
           ))}
         </div>
-        <div style={{ display:"flex", justifyContent:"space-between", fontSize:8, color:S.dim }}>
-          <span>0 km</span><span>{kmDone}/{TOTAL_KM} ({pct}%)</span><span>{TOTAL_KM}</span>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:7, color:ADV.dim, marginBottom:10 }}>
+          <span>ECP START</span><span>TUAS LP1</span><span>WOODLANDS</span><span>CHANGI</span><span>FINISH</span>
+        </div>
+        {/* Detailed segment list with timestamps */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4 }}>
+          {segments.map(s => (
+            <div key={s.id} style={{ display:"flex", gap:6, alignItems:"center", padding:"5px 8px", background: s.completed ? `${s.c}15` : "rgba(0,0,0,0.2)", borderRadius:4, borderLeft:`3px solid ${s.completed?s.c:ADV.border}`, opacity:s.completed?1:0.6 }}>
+              <span style={{ fontSize:9, fontWeight:800, color:s.completed?s.c:ADV.dim, minWidth:12 }}>{s.id}</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:8, color:ADV.text, fontFamily:"system-ui", fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</div>
+                <div style={{ fontSize:7, color:ADV.dim, fontFamily:"system-ui" }}>
+                  {s.km}km{s.completedAt && ` · ${fmtClock(s.completedAt)}`}
+                </div>
+              </div>
+              {s.completed && <span style={{ fontSize:10, color:s.c }}>✓</span>}
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Segment list */}
-      <div style={{ background:S.card, borderRadius:8, padding:10, border:`1px solid ${S.border}`, marginBottom:8 }}>
-        <h3 style={{ margin:"0 0 6px", fontSize:11, color:"#93c5fd", fontFamily:"system-ui" }}>Segments</h3>
-        {segments.map(s => (
-          <div key={s.id} style={{ display:"flex", gap:6, alignItems:"center", padding:"3px 0", borderBottom:`1px solid ${S.border}`, opacity:s.completed?1:0.4 }}>
-            <span style={{ fontSize:9, fontWeight:700, color:s.completed?s.c:S.dim, minWidth:14 }}>{s.id}</span>
-            <span style={{ flex:1, fontSize:9, fontFamily:"system-ui" }}>{s.name}</span>
-            <span style={{ fontSize:8, color:S.dim }}>{s.km}km</span>
-            {s.completedAt && <span style={{ fontSize:8, color:"#22c55e" }}>{fmtClock(s.completedAt)}</span>}
+      {/* PROMINENT Chat — inviting join prompt */}
+      <div style={{ background:`linear-gradient(135deg, ${ADV.card}, ${ADV.bg})`, borderRadius:12, padding:14, border:`2px solid ${ADV.accent}66`, marginBottom:10, position:"relative", overflow:"hidden" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+          <span style={{ fontSize:22 }}>💬</span>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:14, fontWeight:800, color:ADV.text, fontFamily:"system-ui" }}>Cheer Them On!</div>
+            <div style={{ fontSize:9, color:ADV.accent, fontFamily:"system-ui" }}>Join the live chat — send encouragement from the sidelines</div>
           </div>
-        ))}
+        </div>
+        <ChatRoom state={{ status, dateOption }} kmDone={kmDone} S={{ ...S, card:ADV.bg, border:ADV.border, text:ADV.text, mut:ADV.mut, dim:ADV.dim, acc:ADV.accent }} />
       </div>
-
-      {/* Chat */}
-      <ChatRoom state={{ status, dateOption }} kmDone={kmDone} S={S} />
 
       {/* Rider login */}
       <div style={{ textAlign:"center", marginTop:16, padding:"12px 0" }}>
         {!showPin ? (
-          <button onClick={()=>setShowPin(true)} style={{ background:"transparent", border:"none", color:S.dim, fontSize:8, cursor:"pointer", textDecoration:"underline", fontFamily:"system-ui", opacity:0.4 }}>
+          <button onClick={()=>setShowPin(true)} style={{ background:"transparent", border:"none", color:ADV.dim, fontSize:8, cursor:"pointer", textDecoration:"underline", fontFamily:"system-ui", opacity:0.4 }}>
             Rider login
           </button>
         ) : (
@@ -825,11 +954,11 @@ function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullsc
               type="password" value={pinInput} onChange={e=>setPinInput(e.target.value)}
               onKeyDown={e=>{if(e.key==="Enter")handlePin();}}
               placeholder="PIN"
-              style={{ width:80, padding:"6px 8px", fontSize:11, borderRadius:5, border:`1px solid ${pinError?"#ef4444":S.border}`, background:S.card, color:S.text, outline:"none", textAlign:"center" }}
+              style={{ width:80, padding:"6px 8px", fontSize:11, borderRadius:5, border:`1px solid ${pinError?"#ef4444":ADV.border}`, background:ADV.card, color:ADV.text, outline:"none", textAlign:"center" }}
               autoFocus
             />
-            <button onClick={handlePin} style={{ padding:"6px 12px", fontSize:10, fontWeight:700, borderRadius:5, border:"none", cursor:"pointer", background:S.acc, color:"#fff" }}>Go</button>
-            <button onClick={()=>{setShowPin(false);setPinInput("");}} style={{ padding:"6px 8px", fontSize:10, borderRadius:5, border:"none", cursor:"pointer", background:S.card, color:S.dim }}>x</button>
+            <button onClick={handlePin} style={{ padding:"6px 12px", fontSize:10, fontWeight:700, borderRadius:5, border:"none", cursor:"pointer", background:ADV.accent, color:"#000" }}>Go</button>
+            <button onClick={()=>{setShowPin(false);setPinInput("");}} style={{ padding:"6px 8px", fontSize:10, borderRadius:5, border:"none", cursor:"pointer", background:ADV.card, color:ADV.dim }}>x</button>
           </div>
         )}
         {pinError && <div style={{ fontSize:9, color:"#ef4444", marginTop:4, fontFamily:"system-ui" }}>Wrong PIN</div>}
@@ -1191,7 +1320,10 @@ function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearing
 // ==========================================================================
 // TRACKER TAB
 // ==========================================================================
-function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, completeSeg, undoSeg, addNote, elapsed, kmDone, kmLeft, pct, S }) {
+function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, loadAttemptById, completeSeg, undoSeg, addNote, elapsed, kmDone, kmLeft, pct, S }) {
+  const [attempts, setAttempts] = useState(loadAttempts);
+  const [showAttempts, setShowAttempts] = useState(false);
+  const refreshAttempts = () => setAttempts(loadAttempts());
   if (state.status === "idle") {
     return (
       <div style={{ textAlign:"center", padding:"24px 12px" }}>
@@ -1233,12 +1365,47 @@ function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, comple
           {state.status === "active" && <Btn onClick={pauseRide} bg="#eab308" text="⏸ Pause" />}
           {state.status === "paused" && <Btn onClick={resumeRide} bg="#22c55e" text="▶ Resume" />}
           {state.status === "finished" && <div style={{ fontSize:13, fontWeight:700, color:"#22c55e", padding:"8px 14px" }}>🏁 COMPLETE!</div>}
-          <Btn onClick={()=>resetRide(false)} bg="#ef4444" text="↺ Reset" />
-          <Btn onClick={()=>resetRide(true)} bg="#7f1d1d" text="🗑 Full Reset" />
+          <Btn onClick={()=>{resetRide("save"); setTimeout(refreshAttempts, 100);}} bg="#3b82f6" text="💾 Save & Reset" />
+          <Btn onClick={()=>resetRide("reset")} bg="#ef4444" text="↺ Reset" />
+          <Btn onClick={()=>resetRide("full")} bg="#7f1d1d" text="🗑 Full Reset" />
         </div>
         <div style={{ fontSize:8, color:S.dim, textAlign:"center", marginTop:4, fontFamily:"system-ui" }}>
-          Reset = clears ride state · Full Reset = also clears chat (use after testing, before real ride)
+          Save & Reset = archive this attempt · Reset = discard · Full Reset = also clears chat
         </div>
+      </div>
+
+      {/* Saved Attempts */}
+      <div style={{ background:S.card, borderRadius:10, padding:10, border:`1px solid ${S.border}`, marginBottom:8 }}>
+        <button onClick={()=>setShowAttempts(!showAttempts)} style={{ width:"100%", display:"flex", alignItems:"center", gap:8, background:"transparent", border:"none", color:S.text, cursor:"pointer", padding:0, fontFamily:"system-ui", textAlign:"left" }}>
+          <span style={{ fontSize:14 }}>💾</span>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:11, fontWeight:700 }}>Saved Attempts <span style={{ fontSize:9, color:S.dim, fontWeight:400 }}>· {attempts.length}</span></div>
+            <div style={{ fontSize:8, color:S.dim, marginTop:1 }}>{attempts.length === 0 ? "No saved attempts yet" : "Load a previous test or real ride"}</div>
+          </div>
+          <span style={{ fontSize:10, color:S.mut }}>{showAttempts ? "▼" : "▶"}</span>
+        </button>
+        {showAttempts && (
+          <div style={{ marginTop:10 }}>
+            {attempts.length === 0 ? (
+              <div style={{ fontSize:9, color:S.dim, textAlign:"center", padding:"12px 0", fontFamily:"system-ui" }}>
+                Tap <b>💾 Save & Reset</b> above to archive your current ride as an attempt
+              </div>
+            ) : (
+              [...attempts].reverse().map(a => (
+                <div key={a.id} style={{ display:"flex", gap:6, alignItems:"center", padding:"8px 10px", marginBottom:4, background:"#0a0f1a", borderRadius:6, border:`1px solid ${S.border}` }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:S.text, fontFamily:"system-ui", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.name}</div>
+                    <div style={{ fontSize:8, color:S.dim, fontFamily:"system-ui" }}>
+                      {a.kmDone}km · {a.segsDone}/11 segs · {fmtTime(a.elapsed)} · {new Date(a.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <button onClick={()=>loadAttemptById(a.id)} style={{ padding:"5px 8px", fontSize:8, fontWeight:700, borderRadius:4, border:"none", cursor:"pointer", background:"#3b82f6", color:"#fff", fontFamily:"system-ui" }}>Load</button>
+                  <button onClick={()=>{if(confirm("Delete this attempt?")){deleteAttempt(a.id); refreshAttempts();}}} style={{ padding:"5px 8px", fontSize:8, fontWeight:700, borderRadius:4, border:`1px solid ${S.border}`, cursor:"pointer", background:"transparent", color:"#ef4444", fontFamily:"system-ui" }}>🗑</button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
       <div style={{ marginBottom:8 }}>
