@@ -539,9 +539,11 @@ export default function App() {
     a.click(); URL.revokeObjectURL(url);
   };
 
+  // Minimalist rider theme — inspired by Rapha / Pas Normal / Wahoo
+  // Near-black background, single amber accent, high contrast, minimal borders
   const S = brightness === "night"
     ? { bg:"#000000", card:"#0a0a0a", border:"#1a1a1a", acc:"#ef4444", text:"#f87171", mut:"#991b1b", dim:"#7f1d1d" }
-    : { bg:"#050a12", card:"#111827", border:"#1f2937", acc:"#3b82f6", text:"#f3f4f6", mut:"#9ca3af", dim:"#6b7280" };
+    : { bg:"#0a0a0a", card:"#141414", border:"#262626", acc:"#f97316", text:"#fafafa", mut:"#a3a3a3", dim:"#525252" };
 
   // Primary tabs — essential while riding (big buttons)
   // Map placed beside Nav for easy access to route + chat from navigation view
@@ -2300,79 +2302,107 @@ function InstaCard({ seg, state, elapsed, kmDone, pct, dateInfo, S, onClose }) {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  // Minimalist Instagram-worthy card
+  const accentColor = segData?.c || "#f97316";
+  const ts = photo ? { textShadow:"0 2px 8px rgba(0,0,0,0.95)" } : {};
+
   return (
     <div style={{ position:"relative" }}>
-      <button onClick={onClose} style={{ position:"absolute", top:4, right:4, zIndex:10, background:"#00000066", color:"#fff", border:"none", borderRadius:"50%", width:26, height:26, cursor:"pointer", fontSize:13 }}>×</button>
-      <div style={{ aspectRatio:"4/5", background:"linear-gradient(160deg,#0a0a1a 0%,#0f172a 30%,#1e1b4b 70%,#0f172a 100%)", borderRadius:14, padding:20, display:"flex", flexDirection:"column", justifyContent:"space-between", border:"1px solid #312e81", overflow:"hidden", position:"relative" }}>
-        {/* Background photo (if uploaded) */}
+      <button onClick={onClose} style={{ position:"absolute", top:8, right:8, zIndex:10, background:"rgba(0,0,0,0.6)", backdropFilter:"blur(8px)", color:"#fff", border:"none", borderRadius:"50%", width:28, height:28, cursor:"pointer", fontSize:14, fontWeight:300 }}>×</button>
+      <div style={{ aspectRatio:"4/5", background: photo ? "#000" : "#0a0a0a", borderRadius:4, padding:0, display:"flex", flexDirection:"column", border:"none", overflow:"hidden", position:"relative", fontFamily:"'Helvetica Neue', system-ui, sans-serif" }}>
+        {/* Background photo */}
         {photo && (
           <>
-            <div style={{ position:"absolute", top:0, left:0, right:0, bottom:0, backgroundImage:`url(${photo})`, backgroundSize:"cover", backgroundPosition:"center", zIndex:0 }} />
-            {/* Dark overlay for text readability */}
-            <div style={{ position:"absolute", top:0, left:0, right:0, bottom:0, background:"linear-gradient(180deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.35) 40%, rgba(0,0,0,0.75) 100%)", zIndex:0 }} />
+            <div style={{ position:"absolute", inset:0, backgroundImage:`url(${photo})`, backgroundSize:"cover", backgroundPosition:"center", zIndex:0 }} />
+            <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.15) 35%, rgba(0,0,0,0.25) 60%, rgba(0,0,0,0.92) 100%)", zIndex:0 }} />
           </>
         )}
-        {/* Grid overlay (only if no photo) */}
-        {!photo && (
-          <div style={{ position:"absolute", top:0, left:0, right:0, bottom:0, opacity:0.03, backgroundImage:"repeating-linear-gradient(0deg,#fff 0px,#fff 1px,transparent 1px,transparent 40px),repeating-linear-gradient(90deg,#fff 0px,#fff 1px,transparent 1px,transparent 40px)" }} />
-        )}
-        <div style={{ position:"relative", zIndex:1 }}>
-          <div style={{ fontSize:9, letterSpacing:4, color:photo?"#fff":"#818cf8", fontWeight:700, fontFamily:"system-ui", textShadow:photo?"0 1px 4px rgba(0,0,0,0.8)":"none" }}>SG ROUND ISLAND</div>
-          <div style={{ fontSize:8, color:photo?"#e5e7eb":"#6366f1", marginTop:2, fontFamily:"system-ui", textShadow:photo?"0 1px 4px rgba(0,0,0,0.8)":"none" }}>{dateInfo ? `${dateInfo.label.toUpperCase()} · BLITZ · ${dateInfo.day.toUpperCase()}` : ""}</div>
+
+        {/* TOP — minimal brand mark */}
+        <div style={{ position:"relative", zIndex:1, padding:"24px 24px 0" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{ width:24, height:2, background:accentColor }} />
+              <div style={{ fontSize:9, letterSpacing:3, color:"#fff", fontWeight:500, ...ts }}>ROUND ISLAND</div>
+            </div>
+            {dateInfo && <div style={{ fontSize:8, letterSpacing:2, color:"rgba(255,255,255,0.6)", fontWeight:400, ...ts }}>{dateInfo.label.toUpperCase()}</div>}
+          </div>
         </div>
-        <div style={{ textAlign:"center", position:"relative", zIndex:1 }}>
-          {/* Progressive route silhouette — always shows full outline + segments up to current */}
+
+        {/* CENTER — Hero silhouette */}
+        <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", position:"relative", zIndex:1, padding:"10px 20px" }}>
           {silhouette && (
-            <svg viewBox="0 0 200 200" style={{ width: isFinal ? 150 : 135, height: isFinal ? 150 : 135, margin:"0 auto 6px", display:"block", filter:photo?"drop-shadow(0 2px 8px rgba(0,0,0,0.95))":"none" }}>
-              {/* Full route outline — always visible as backdrop */}
-              <path d={silhouette.fullPath} fill="none" stroke={photo?"rgba(255,255,255,0.3)":"#334155"} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" />
-              {/* Previous segments in their own colors */}
+            <svg viewBox="0 0 200 200" style={{ width:"90%", height:"90%", maxWidth:280, display:"block", filter:photo?"drop-shadow(0 2px 12px rgba(0,0,0,1))":"drop-shadow(0 0 20px rgba(249,115,22,0.15))" }}>
+              {/* Full route outline — dim backdrop */}
+              <path d={silhouette.fullPath} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+              {/* Previous segments */}
               {silhouette.segmentPaths.filter(s => !s.isCurrent).map(s => (
-                <path key={s.id} d={s.path} fill="none" stroke={s.color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" opacity={0.9} />
+                <path key={s.id} d={s.path} fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
               ))}
-              {/* Current segment — highlighted on top, thicker + bright */}
+              {/* Current segment — bright accent with glow */}
               {silhouette.segmentPaths.filter(s => s.isCurrent).map(s => (
                 <g key={s.id}>
-                  <path d={s.path} fill="none" stroke="#fff" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" opacity={0.35} />
-                  <path d={s.path} fill="none" stroke={s.color} strokeWidth={3.2} strokeLinecap="round" strokeLinejoin="round" />
+                  <path d={s.path} fill="none" stroke={accentColor} strokeWidth={7} strokeLinecap="round" strokeLinejoin="round" opacity={0.25} />
+                  <path d={s.path} fill="none" stroke={accentColor} strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" />
                 </g>
               ))}
-              {/* Start marker (ECP) — always shown */}
+              {/* Start point */}
               {silhouette.startXY && (
-                <circle cx={silhouette.startXY[0]} cy={silhouette.startXY[1]} r={3} fill="#22c55e" stroke="#fff" strokeWidth={1.5} />
+                <circle cx={silhouette.startXY[0]} cy={silhouette.startXY[1]} r={2.5} fill="#fff" />
               )}
-              {/* Current end marker */}
+              {/* Current end point */}
               {silhouette.endXY && !isFinal && (
-                <circle cx={silhouette.endXY[0]} cy={silhouette.endXY[1]} r={3.5} fill="#fbbf24" stroke="#fff" strokeWidth={1.5} />
+                <g>
+                  <circle cx={silhouette.endXY[0]} cy={silhouette.endXY[1]} r={6} fill={accentColor} opacity={0.3} />
+                  <circle cx={silhouette.endXY[0]} cy={silhouette.endXY[1]} r={3} fill={accentColor} />
+                </g>
               )}
             </svg>
           )}
+        </div>
+
+        {/* BOTTOM — Title + stats */}
+        <div style={{ position:"relative", zIndex:1, padding:"0 24px 24px" }}>
           {isFinal ? (
             <>
-              <div style={{ fontSize:44, fontWeight:800, background:"linear-gradient(135deg,#22c55e,#3b82f6)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", textShadow:photo?"0 2px 8px rgba(0,0,0,0.8)":"none" }}>DONE</div>
-              <div style={{ fontSize:13, color:photo?"#fff":"#a5b4fc", marginTop:4, fontFamily:"system-ui", textShadow:photo?"0 1px 4px rgba(0,0,0,0.8)":"none" }}>{TOTAL_KM} km · {fmtTime(elapsed)}</div>
+              <div style={{ fontSize:11, letterSpacing:4, color:accentColor, fontWeight:500, marginBottom:4, ...ts }}>COMPLETED</div>
+              <div style={{ fontSize:56, fontWeight:200, color:"#fff", letterSpacing:-2, lineHeight:0.95, marginBottom:12, fontFamily:"'Helvetica Neue', system-ui, sans-serif", ...ts }}>171<span style={{ fontSize:20, fontWeight:400, color:"rgba(255,255,255,0.6)", marginLeft:6 }}>km</span></div>
             </>
           ) : (
             <>
-              <div style={{ fontSize:10, color:photo?"#fff":"#818cf8", fontWeight:700, marginBottom:3, fontFamily:"system-ui", textShadow:photo?"0 1px 4px rgba(0,0,0,0.8)":"none" }}>SEGMENT {seg} OF 11</div>
-              <div style={{ fontSize:16, fontWeight:800, color:photo?"#fff":"#e2e8f0", fontFamily:"system-ui", marginBottom:4, textShadow:photo?"0 2px 6px rgba(0,0,0,0.9)":"none" }}>{segData?.name}</div>
-              <div style={{ display:"inline-block", padding:"2px 8px", borderRadius:3, background:segData?.c, color:"#fff", fontSize:9, fontWeight:700 }}>{segData?.d} · {segData?.km} km</div>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                <div style={{ fontSize:10, letterSpacing:3, color:accentColor, fontWeight:600, ...ts }}>SEG {String(seg).padStart(2,"0")}/11</div>
+                <div style={{ height:1, flex:1, background:"rgba(255,255,255,0.2)" }} />
+                <div style={{ fontSize:9, letterSpacing:2, color:"rgba(255,255,255,0.6)", fontWeight:400, ...ts }}>{segData?.d?.toUpperCase()}</div>
+              </div>
+              <div style={{ fontSize:26, fontWeight:300, color:"#fff", letterSpacing:-0.5, lineHeight:1.1, marginBottom:14, ...ts }}>{segData?.name}</div>
             </>
           )}
-        </div>
-        <div style={{ position:"relative", zIndex:1 }}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:10 }}>
-            <div style={{ textAlign:"center" }}><div style={{ fontSize:18, fontWeight:800, color:"#22c55e", textShadow:photo?"0 1px 4px rgba(0,0,0,0.9)":"none" }}>{kmDone}</div><div style={{ fontSize:7, color:photo?"#e5e7eb":"#64748b", textShadow:photo?"0 1px 2px rgba(0,0,0,0.8)":"none" }}>KM DONE</div></div>
-            <div style={{ textAlign:"center" }}><div style={{ fontSize:18, fontWeight:800, color:"#3b82f6", textShadow:photo?"0 1px 4px rgba(0,0,0,0.9)":"none" }}>{pct}%</div><div style={{ fontSize:7, color:photo?"#e5e7eb":"#64748b", textShadow:photo?"0 1px 2px rgba(0,0,0,0.8)":"none" }}>COMPLETE</div></div>
-            <div style={{ textAlign:"center" }}><div style={{ fontSize:18, fontWeight:800, color:"#eab308", textShadow:photo?"0 1px 4px rgba(0,0,0,0.9)":"none" }}>{fmtPace(kmDone,elapsed)}</div><div style={{ fontSize:7, color:photo?"#e5e7eb":"#64748b", textShadow:photo?"0 1px 2px rgba(0,0,0,0.8)":"none" }}>KM/H AVG</div></div>
+
+          {/* Stats row — minimalist */}
+          <div style={{ display:"flex", gap:0, borderTop:"1px solid rgba(255,255,255,0.15)", paddingTop:14 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:22, fontWeight:300, color:"#fff", lineHeight:1, letterSpacing:-0.5, ...ts }}>{kmDone}<span style={{ fontSize:10, color:"rgba(255,255,255,0.5)", marginLeft:3 }}>km</span></div>
+              <div style={{ fontSize:7, letterSpacing:2, color:"rgba(255,255,255,0.5)", marginTop:4, ...ts }}>DISTANCE</div>
+            </div>
+            <div style={{ flex:1, borderLeft:"1px solid rgba(255,255,255,0.15)", paddingLeft:12 }}>
+              <div style={{ fontSize:22, fontWeight:300, color:"#fff", lineHeight:1, letterSpacing:-0.5, ...ts }}>{fmtTime(elapsed).slice(0,5)}</div>
+              <div style={{ fontSize:7, letterSpacing:2, color:"rgba(255,255,255,0.5)", marginTop:4, ...ts }}>TIME</div>
+            </div>
+            <div style={{ flex:1, borderLeft:"1px solid rgba(255,255,255,0.15)", paddingLeft:12 }}>
+              <div style={{ fontSize:22, fontWeight:300, color:"#fff", lineHeight:1, letterSpacing:-0.5, ...ts }}>{fmtPace(kmDone,elapsed)}<span style={{ fontSize:9, color:"rgba(255,255,255,0.5)", marginLeft:2 }}>km/h</span></div>
+              <div style={{ fontSize:7, letterSpacing:2, color:"rgba(255,255,255,0.5)", marginTop:4, ...ts }}>PACE</div>
+            </div>
           </div>
-          <div style={{ height:3, background:photo?"rgba(255,255,255,0.2)":"#1f2937", borderRadius:2, overflow:"hidden", marginBottom:6 }}>
-            <div style={{ width:`${pct}%`, height:"100%", background:"linear-gradient(90deg,#22c55e,#3b82f6)", borderRadius:2 }} />
+
+          {/* Tiny progress indicator */}
+          <div style={{ marginTop:12, height:1, background:"rgba(255,255,255,0.15)", position:"relative" }}>
+            <div style={{ position:"absolute", left:0, top:0, height:"100%", width:`${pct}%`, background:accentColor }} />
           </div>
-          <div style={{ display:"flex", height:6, borderRadius:3, overflow:"hidden" }}>
-            {state.segments.map((s,i)=>(<div key={i} style={{ flex:s.km, background:s.completed?SEGS[i].c:(photo?"rgba(255,255,255,0.2)":"#1f2937") }} />))}
+          <div style={{ display:"flex", justifyContent:"space-between", marginTop:5 }}>
+            <div style={{ fontSize:7, letterSpacing:1, color:"rgba(255,255,255,0.5)", ...ts }}>{pct}% COMPLETE</div>
+            <div style={{ fontSize:7, letterSpacing:1, color:"rgba(255,255,255,0.5)", ...ts }}>SINGAPORE 🇸🇬</div>
           </div>
-          <div style={{ fontSize:7, color:photo?"#e5e7eb":"#4b5563", marginTop:6, textAlign:"center", fontFamily:"system-ui", textShadow:photo?"0 1px 2px rgba(0,0,0,0.8)":"none" }}>🚴 Round Island · Singapore {TOTAL_KM}km · Recovery Ride</div>
         </div>
       </div>
 
