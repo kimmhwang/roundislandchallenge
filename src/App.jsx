@@ -2220,48 +2220,60 @@ function InstaCard({ seg, state, elapsed, kmDone, pct, dateInfo, S, onClose }) {
     }
   }, [routeData]);
 
-  // Build SVG silhouette paths
+  // Build SVG silhouette: full route outline + progressive segments overlaid
   const silhouette = (() => {
     if (!routeData) return null;
-    if (isFinal) {
-      // Final card shows full route silhouette
-      const { path } = pointsToSvgPath(routeData.all, 200, 200, 8);
-      return { fullPath: path, segPath: null };
-    }
-    const segPoints = routeData.slices?.[seg] || [];
-    const { path: segPath } = pointsToSvgPath(segPoints, 200, 200, 8);
-    // Also render the full route as a subtle backdrop so you can see where this segment sits
-    // Use the same bounds as the segment so the silhouette is a zoomed view
-    // Actually show both at the same scale keyed to the SEGMENT bounds
-    if (segPoints.length < 2) return null;
+    const allPoints = routeData.all;
+    if (!allPoints || allPoints.length < 2) return null;
+
+    // Always use the FULL route bounds so the viewBox shows all of Singapore
     let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
-    for (const [lat, lng] of segPoints) {
+    for (const [lat, lng] of allPoints) {
       if (lat < minLat) minLat = lat;
       if (lat > maxLat) maxLat = lat;
       if (lng < minLng) minLng = lng;
       if (lng > maxLng) maxLng = lng;
     }
-    // Expand bounds slightly to give context
-    const latPad = (maxLat - minLat) * 0.5 || 0.01;
-    const lngPad = (maxLng - minLng) * 0.5 || 0.01;
-    minLat -= latPad; maxLat += latPad; minLng -= lngPad; maxLng += lngPad;
     const latRange = maxLat - minLat;
     const lngRange = maxLng - minLng;
-    const scale = Math.min((200 - 16) / lngRange, (200 - 16) / latRange);
-    const offsetX = (200 - lngRange * scale) / 2;
-    const offsetY = (200 - latRange * scale) / 2;
-    const mapXY = (lat, lng) => {
-      const x = (lng - minLng) * scale + offsetX;
-      const y = (maxLat - lat) * scale + offsetY;
-      return [x, y];
+    const VB = 200, PAD = 10;
+    const scale = Math.min((VB - PAD * 2) / lngRange, (VB - PAD * 2) / latRange);
+    const offsetX = (VB - lngRange * scale) / 2;
+    const offsetY = (VB - latRange * scale) / 2;
+    const mapXY = (lat, lng) => [(lng - minLng) * scale + offsetX, (maxLat - lat) * scale + offsetY];
+    const pointsToPath = (pts) => {
+      if (!pts || pts.length < 2) return "";
+      return "M " + pts.map(([lat, lng]) => {
+        const [x, y] = mapXY(lat, lng);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(" L ");
     };
-    // Full route path clipped to bounds area
-    const fullCoords = routeData.all.map(([lat, lng]) => mapXY(lat, lng).map(n => n.toFixed(1)).join(","));
-    const segCoords = segPoints.map(([lat, lng]) => mapXY(lat, lng).map(n => n.toFixed(1)).join(","));
-    return {
-      fullPath: `M ${fullCoords.join(" L ")}`,
-      segPath: `M ${segCoords.join(" L ")}`,
-    };
+
+    // Full route backdrop
+    const fullPath = pointsToPath(allPoints);
+
+    // Segments to show (cumulative up to current segment for segment cards, all for final)
+    const currentSegId = isFinal ? 11 : seg;
+    const segmentPaths = [];
+    for (const s of SEGS) {
+      if (s.id > currentSegId) break;
+      const pts = routeData.slices?.[s.id];
+      if (!pts || pts.length < 2) continue;
+      segmentPaths.push({
+        id: s.id,
+        color: s.c,
+        path: pointsToPath(pts),
+        isCurrent: s.id === currentSegId && !isFinal,
+      });
+    }
+
+    // Start of the ride (ECP) and end of the current segment — markers
+    const startXY = mapXY(allPoints[0][0], allPoints[0][1]);
+    const currentSegPoints = routeData.slices?.[currentSegId] || [];
+    const endPoint = currentSegPoints[currentSegPoints.length - 1];
+    const endXY = endPoint ? mapXY(endPoint[0], endPoint[1]) : null;
+
+    return { fullPath, segmentPaths, startXY, endXY };
   })();
 
   const handleFile = (e) => {
@@ -2309,40 +2321,40 @@ function InstaCard({ seg, state, elapsed, kmDone, pct, dateInfo, S, onClose }) {
           <div style={{ fontSize:8, color:photo?"#e5e7eb":"#6366f1", marginTop:2, fontFamily:"system-ui", textShadow:photo?"0 1px 4px rgba(0,0,0,0.8)":"none" }}>{dateInfo ? `${dateInfo.label.toUpperCase()} · BLITZ · ${dateInfo.day.toUpperCase()}` : ""}</div>
         </div>
         <div style={{ textAlign:"center", position:"relative", zIndex:1 }}>
+          {/* Progressive route silhouette — always shows full outline + segments up to current */}
+          {silhouette && (
+            <svg viewBox="0 0 200 200" style={{ width: isFinal ? 150 : 135, height: isFinal ? 150 : 135, margin:"0 auto 6px", display:"block", filter:photo?"drop-shadow(0 2px 8px rgba(0,0,0,0.95))":"none" }}>
+              {/* Full route outline — always visible as backdrop */}
+              <path d={silhouette.fullPath} fill="none" stroke={photo?"rgba(255,255,255,0.3)":"#334155"} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" />
+              {/* Previous segments in their own colors */}
+              {silhouette.segmentPaths.filter(s => !s.isCurrent).map(s => (
+                <path key={s.id} d={s.path} fill="none" stroke={s.color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" opacity={0.9} />
+              ))}
+              {/* Current segment — highlighted on top, thicker + bright */}
+              {silhouette.segmentPaths.filter(s => s.isCurrent).map(s => (
+                <g key={s.id}>
+                  <path d={s.path} fill="none" stroke="#fff" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" opacity={0.35} />
+                  <path d={s.path} fill="none" stroke={s.color} strokeWidth={3.2} strokeLinecap="round" strokeLinejoin="round" />
+                </g>
+              ))}
+              {/* Start marker (ECP) — always shown */}
+              {silhouette.startXY && (
+                <circle cx={silhouette.startXY[0]} cy={silhouette.startXY[1]} r={3} fill="#22c55e" stroke="#fff" strokeWidth={1.5} />
+              )}
+              {/* Current end marker */}
+              {silhouette.endXY && !isFinal && (
+                <circle cx={silhouette.endXY[0]} cy={silhouette.endXY[1]} r={3.5} fill="#fbbf24" stroke="#fff" strokeWidth={1.5} />
+              )}
+            </svg>
+          )}
           {isFinal ? (
             <>
-              {/* Full route silhouette */}
-              {silhouette?.fullPath && (
-                <svg viewBox="0 0 200 200" style={{ width:140, height:140, margin:"0 auto 8px", display:"block", filter:photo?"drop-shadow(0 2px 6px rgba(0,0,0,0.9))":"none" }}>
-                  <path d={silhouette.fullPath} fill="none" stroke={photo?"#fff":"#22c55e"} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.95} />
-                </svg>
-              )}
               <div style={{ fontSize:44, fontWeight:800, background:"linear-gradient(135deg,#22c55e,#3b82f6)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", textShadow:photo?"0 2px 8px rgba(0,0,0,0.8)":"none" }}>DONE</div>
               <div style={{ fontSize:13, color:photo?"#fff":"#a5b4fc", marginTop:4, fontFamily:"system-ui", textShadow:photo?"0 1px 4px rgba(0,0,0,0.8)":"none" }}>{TOTAL_KM} km · {fmtTime(elapsed)}</div>
             </>
           ) : (
             <>
-              <div style={{ fontSize:10, color:photo?"#fff":"#818cf8", fontWeight:700, marginBottom:6, fontFamily:"system-ui", textShadow:photo?"0 1px 4px rgba(0,0,0,0.8)":"none" }}>SEGMENT {seg} OF 11</div>
-              {/* Segment silhouette — full route dimmed + this segment highlighted */}
-              {silhouette?.segPath && (
-                <svg viewBox="0 0 200 200" style={{ width:130, height:130, margin:"0 auto 6px", display:"block", filter:photo?"drop-shadow(0 2px 6px rgba(0,0,0,0.9))":"none" }}>
-                  {silhouette.fullPath && (
-                    <path d={silhouette.fullPath} fill="none" stroke={photo?"rgba(255,255,255,0.35)":"#334155"} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
-                  )}
-                  <path d={silhouette.segPath} fill="none" stroke={segData?.c || "#22c55e"} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-                  {/* Start and end markers of this segment */}
-                  {(() => {
-                    const m = silhouette.segPath.match(/M\s*([\d.]+),([\d.]+)/);
-                    const last = silhouette.segPath.match(/L\s*([\d.]+),([\d.]+)(?!.*L)/);
-                    return (
-                      <>
-                        {m && <circle cx={m[1]} cy={m[2]} r={3} fill="#fff" stroke={segData?.c || "#22c55e"} strokeWidth={1.5} />}
-                        {last && <circle cx={last[1]} cy={last[2]} r={3} fill={segData?.c || "#22c55e"} stroke="#fff" strokeWidth={1.5} />}
-                      </>
-                    );
-                  })()}
-                </svg>
-              )}
+              <div style={{ fontSize:10, color:photo?"#fff":"#818cf8", fontWeight:700, marginBottom:3, fontFamily:"system-ui", textShadow:photo?"0 1px 4px rgba(0,0,0,0.8)":"none" }}>SEGMENT {seg} OF 11</div>
               <div style={{ fontSize:16, fontWeight:800, color:photo?"#fff":"#e2e8f0", fontFamily:"system-ui", marginBottom:4, textShadow:photo?"0 2px 6px rgba(0,0,0,0.9)":"none" }}>{segData?.name}</div>
               <div style={{ display:"inline-block", padding:"2px 8px", borderRadius:3, background:segData?.c, color:"#fff", fontSize:9, fontWeight:700 }}>{segData?.d} · {segData?.km} km</div>
             </>
