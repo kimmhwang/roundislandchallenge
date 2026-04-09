@@ -22,6 +22,61 @@ function FitBounds({ points }) {
   return null;
 }
 
+// Custom controls — full view + locate rider
+function MapControls({ points, riderGps }) {
+  const map = useMap();
+
+  const fitRoute = () => {
+    if (points.length === 0) return;
+    const lats = points.map(p => p[0]);
+    const lngs = points.map(p => p[1]);
+    map.fitBounds([[Math.min(...lats), Math.min(...lngs)], [Math.max(...lats), Math.max(...lngs)]], { padding: [20, 20] });
+  };
+
+  const locateRider = () => {
+    if (riderGps?.lat && riderGps?.lng) {
+      map.setView([riderGps.lat, riderGps.lng], 15);
+    } else if (points.length > 0) {
+      // Fall back to start of route
+      map.setView(points[0], 14);
+    }
+  };
+
+  const btnStyle = {
+    display: "block",
+    width: 34,
+    height: 34,
+    background: "#ffffff",
+    border: "2px solid rgba(0,0,0,0.2)",
+    borderRadius: 4,
+    cursor: "pointer",
+    fontSize: 16,
+    marginBottom: 4,
+    padding: 0,
+    color: "#333",
+    fontWeight: "bold",
+  };
+
+  return (
+    <div style={{ position:"absolute", top:10, right:10, zIndex:1000, display:"flex", flexDirection:"column" }}>
+      <button
+        onClick={fitRoute}
+        title="Full route view"
+        style={btnStyle}
+      >
+        🗺️
+      </button>
+      <button
+        onClick={locateRider}
+        title={riderGps ? "Locate rider" : "Jump to start"}
+        style={{ ...btnStyle, opacity: riderGps ? 1 : 0.7 }}
+      >
+        📍
+      </button>
+    </div>
+  );
+}
+
 // Parse a GPX XML string to array of [lat, lng]
 const parseGpx = (xml) => {
   const doc = new DOMParser().parseFromString(xml, "text/xml");
@@ -77,7 +132,7 @@ export default function LeafletMap({ riderGps, segments, kmDone, brightness, hei
   if (routePoints.length === 0) return <div style={{ height, display:"flex", alignItems:"center", justifyContent:"center", color:"#9ca3af", fontSize:11, fontFamily:"system-ui" }}>No route data</div>;
 
   return (
-    <div style={{ height, borderRadius:8, overflow:"hidden", border:"1px solid #1f2937" }}>
+    <div style={{ height, borderRadius:8, overflow:"hidden", border:"1px solid #1f2937", position:"relative" }}>
       <MapContainer
         center={[1.355, 103.82]}
         zoom={11}
@@ -90,6 +145,7 @@ export default function LeafletMap({ riderGps, segments, kmDone, brightness, hei
       >
         <TileLayer url={tileUrl} attribution={tileAttribution} subdomains="abcd" maxZoom={18} bounds={SG_BOUNDS} />
         <FitBounds points={routePoints} />
+        <MapControls points={routePoints} riderGps={riderGps} />
 
         {/* Remaining route — blue */}
         <Polyline positions={remainingPath} pathOptions={{ color:"#3b82f6", weight:4, opacity:0.85 }} />

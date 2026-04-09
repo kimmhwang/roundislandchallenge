@@ -544,10 +544,11 @@ export default function App() {
     : { bg:"#050a12", card:"#111827", border:"#1f2937", acc:"#3b82f6", text:"#f3f4f6", mut:"#9ca3af", dim:"#6b7280" };
 
   // Primary tabs — essential while riding (big buttons)
+  // Chat placed beside Nav for easy access to observer comms from navigation view
   const primaryTabs = [
     { id:"nav", l:"Nav", em:"🧭" },
-    { id:"tracker", l:"Track", em:"🚴" },
     { id:"map", l:"Chat", em:"💬" },
+    { id:"tracker", l:"Track", em:"🚴" },
   ];
   // Secondary tabs — resting-only, accessed via overflow menu
   const secondaryTabs = [
@@ -930,13 +931,13 @@ function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullsc
         </div>
       </div>
 
-      {/* PROMINENT Chat — inviting join prompt */}
+      {/* PROMINENT Chat */}
       <div style={{ background:`linear-gradient(135deg, ${ADV.card}, ${ADV.bg})`, borderRadius:12, padding:14, border:`2px solid ${ADV.accent}66`, marginBottom:10, position:"relative", overflow:"hidden" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-          <span style={{ fontSize:22 }}>💬</span>
+          <span style={{ fontSize:22 }}>📣</span>
           <div style={{ flex:1 }}>
-            <div style={{ fontSize:14, fontWeight:800, color:ADV.text, fontFamily:"system-ui" }}>Cheer Them On!</div>
-            <div style={{ fontSize:9, color:ADV.accent, fontFamily:"system-ui" }}>Join the live chat — send encouragement from the sidelines</div>
+            <div style={{ fontSize:14, fontWeight:800, color:ADV.text, fontFamily:"system-ui" }}>Rider Comms</div>
+            <div style={{ fontSize:9, color:ADV.accent, fontFamily:"system-ui" }}>Live messages between the rider and the crew</div>
           </div>
         </div>
         <ChatRoom state={{ status, dateOption }} kmDone={kmDone} S={{ ...S, card:ADV.bg, border:ADV.border, text:ADV.text, mut:ADV.mut, dim:ADV.dim, acc:ADV.accent }} />
@@ -973,7 +974,6 @@ function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullsc
 function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearingToNextWp, withinProximity, lastGps, gpsTracking, elapsed, kmDone, kmLeft, pct, completeSeg, pauseRide, resumeRide, setGpsTracking, requestWakeLock, wakeLock, brightness, setTab, S }) {
   const [showStops, setShowStops] = useState(false);
   const [showTurns, setShowTurns] = useState(false);
-  const [showMap, setShowMap] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
@@ -1234,26 +1234,6 @@ function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearing
           )}
         </div>
       )}
-
-      {/* COLLAPSIBLE: Schematic mini-map */}
-      <div style={{ background:S.card, borderRadius:10, padding:10, marginBottom:6, border:`1px solid ${S.border}` }}>
-        <button
-          onClick={()=>setShowMap(!showMap)}
-          style={{ width:"100%", display:"flex", alignItems:"center", gap:8, background:"transparent", border:"none", color:S.text, cursor:"pointer", padding:0, fontFamily:"system-ui", textAlign:"left" }}
-        >
-          <span style={{ fontSize:14 }}>🗺️</span>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:11, fontWeight:700 }}>Schematic Map</div>
-            <div style={{ fontSize:8, color:S.dim, marginTop:1 }}>Use Fenix for real navigation</div>
-          </div>
-          <span style={{ fontSize:10, color:S.mut }}>{showMap ? "▼" : "▶"}</span>
-        </button>
-        {showMap && (
-          <div style={{ marginTop:8 }}>
-            <RouteMap state={state} lastGps={lastGps} gpsTracking={gpsTracking} highlightWp={nextWp} brightness={brightness} />
-          </div>
-        )}
-      </div>
 
       {/* COLLAPSIBLE: Live Chat (read + quick reply) */}
       <div style={{ background:S.card, borderRadius:10, padding:10, marginBottom:6, border:`1px solid ${messages.length > 0 ? "#3b82f6" : S.border}` }}>
@@ -1566,52 +1546,30 @@ function ChatRoom({ state, kmDone, S }) {
     } catch(e) {}
   };
 
-  // Name setup screen
-  if (!nameSet) {
-    return (
-      <div style={{ background:S.card, borderRadius:10, padding:14, border:`1px solid ${S.border}` }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-          <span style={{ fontSize:18 }}>💬</span>
-          <div>
-            <div style={{ fontSize:13, fontWeight:700, color:S.text, fontFamily:"system-ui" }}>Live Observer Chat</div>
-            <div style={{ fontSize:10, color:S.dim, fontFamily:"system-ui" }}>Enter a display name to join</div>
-          </div>
-        </div>
-        <input
-          type="text" value={name} onChange={e=>setName(e.target.value)}
-          onKeyDown={e=>{if(e.key==="Enter")saveName(name);}}
-          placeholder="Your name (max 20 chars)"
-          maxLength={20}
-          style={{ width:"100%", padding:"10px 12px", fontSize:11, borderRadius:6, border:`1px solid ${S.border}`, background:"#0a0f1a", color:S.text, outline:"none", boxSizing:"border-box", fontFamily:"system-ui" }}
-        />
-        <button onClick={()=>saveName(name)} disabled={!name.trim()} style={{ width:"100%", marginTop:8, padding:"10px", fontSize:11, fontWeight:700, borderRadius:6, border:"none", cursor:name.trim()?"pointer":"not-allowed", background:name.trim()?S.acc:"#374151", color:"#fff", opacity:name.trim()?1:0.5 }}>
-          Join Chat
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div style={{ background:S.card, borderRadius:10, padding:10, border:`1px solid ${S.border}` }}>
       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
         <span style={{ fontSize:16 }}>💬</span>
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:S.text, fontFamily:"system-ui" }}>Observer Chat</div>
+          <div style={{ fontSize:12, fontWeight:700, color:S.text, fontFamily:"system-ui" }}>Rider Comms</div>
           <div style={{ fontSize:9, color:S.dim, fontFamily:"system-ui" }}>
-            {messages.length} messages · as <b style={{ color:"#93c5fd" }}>{name}</b>
-            <button onClick={()=>setNameSet(false)} style={{ marginLeft:6, background:"transparent", border:"none", color:S.dim, fontSize:8, cursor:"pointer", textDecoration:"underline", fontFamily:"system-ui" }}>change</button>
+            {messages.length} messages{nameSet && <> · as <b style={{ color:"#93c5fd" }}>{name}</b> <button onClick={()=>setNameSet(false)} style={{ marginLeft:2, background:"transparent", border:"none", color:S.dim, fontSize:8, cursor:"pointer", textDecoration:"underline", fontFamily:"system-ui" }}>change</button></>}
           </div>
         </div>
         <button onClick={exportChat} title="Export for documentary" style={{ padding:"4px 8px", fontSize:9, fontWeight:700, borderRadius:4, border:`1px solid ${S.border}`, background:"transparent", color:S.mut, cursor:"pointer" }}>⬇</button>
         <button onClick={clearChat} title="Clear chat" style={{ padding:"4px 8px", fontSize:9, fontWeight:700, borderRadius:4, border:`1px solid ${S.border}`, background:"transparent", color:"#ef4444", cursor:"pointer" }}>🗑</button>
       </div>
 
-      {/* Messages */}
-      <div ref={listRef} style={{ maxHeight:280, overflowY:"auto", background:"#050a12", borderRadius:6, padding:8, marginBottom:8, border:`1px solid ${S.border}` }}>
+      {/* Messages — always visible */}
+      <div ref={listRef} style={{ maxHeight:280, minHeight:160, overflowY:"auto", background:"#050a12", borderRadius:6, padding:8, marginBottom:8, border:`1px solid ${S.border}` }}>
         {loading ? (
-          <div style={{ textAlign:"center", color:S.dim, fontSize:10, padding:20, fontFamily:"system-ui" }}>Loading chat...</div>
+          <div style={{ textAlign:"center", color:S.dim, fontSize:10, padding:20, fontFamily:"system-ui" }}>Loading messages...</div>
         ) : messages.length === 0 ? (
-          <div style={{ textAlign:"center", color:S.dim, fontSize:10, padding:20, fontFamily:"system-ui" }}>No messages yet. Be the first to cheer!</div>
+          <div style={{ textAlign:"center", color:S.dim, fontSize:10, padding:24, fontFamily:"system-ui" }}>
+            <div style={{ fontSize:20, marginBottom:6 }}>📣</div>
+            <div>No messages yet</div>
+            <div style={{ fontSize:9, marginTop:4 }}>Drop the first message for the rider</div>
+          </div>
         ) : (
           messages.map(m => (
             <div key={m.id} style={{ marginBottom:8, paddingBottom:6, borderBottom:`1px solid ${S.border}` }}>
@@ -1628,20 +1586,40 @@ function ChatRoom({ state, kmDone, S }) {
         )}
       </div>
 
-      {/* Compose */}
-      <div style={{ display:"flex", gap:4 }}>
-        <input
-          type="text" value={draft} onChange={e=>setDraft(e.target.value)}
-          onKeyDown={e=>{if(e.key==="Enter")sendMessage();}}
-          placeholder="Cheer / question / observation..."
-          maxLength={300}
-          disabled={sending}
-          style={{ flex:1, padding:"8px 10px", fontSize:11, borderRadius:5, border:`1px solid ${S.border}`, background:"#0a0f1a", color:S.text, outline:"none", fontFamily:"system-ui" }}
-        />
-        <button onClick={sendMessage} disabled={!draft.trim() || sending} style={{ padding:"8px 14px", fontSize:10, fontWeight:700, borderRadius:5, border:"none", cursor:draft.trim()&&!sending?"pointer":"not-allowed", background:S.acc, color:"#fff", opacity:draft.trim()&&!sending?1:0.4 }}>
-          {sending ? "..." : "Send"}
-        </button>
-      </div>
+      {/* Name entry (if not set) OR Compose (if set) */}
+      {!nameSet ? (
+        <div>
+          <div style={{ fontSize:9, color:S.mut, marginBottom:6, fontFamily:"system-ui", textAlign:"center" }}>
+            👋 Enter a display name to join the conversation
+          </div>
+          <div style={{ display:"flex", gap:4 }}>
+            <input
+              type="text" value={name} onChange={e=>setName(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter")saveName(name);}}
+              placeholder="Your name"
+              maxLength={20}
+              style={{ flex:1, padding:"10px 12px", fontSize:11, borderRadius:5, border:`1px solid ${S.border}`, background:"#0a0f1a", color:S.text, outline:"none", boxSizing:"border-box", fontFamily:"system-ui" }}
+            />
+            <button onClick={()=>saveName(name)} disabled={!name.trim()} style={{ padding:"10px 16px", fontSize:10, fontWeight:700, borderRadius:5, border:"none", cursor:name.trim()?"pointer":"not-allowed", background:name.trim()?S.acc:"#374151", color:"#fff", opacity:name.trim()?1:0.5, fontFamily:"system-ui" }}>
+              Join
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display:"flex", gap:4 }}>
+          <input
+            type="text" value={draft} onChange={e=>setDraft(e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter")sendMessage();}}
+            placeholder="Type a message..."
+            maxLength={300}
+            disabled={sending}
+            style={{ flex:1, padding:"8px 10px", fontSize:11, borderRadius:5, border:`1px solid ${S.border}`, background:"#0a0f1a", color:S.text, outline:"none", fontFamily:"system-ui" }}
+          />
+          <button onClick={sendMessage} disabled={!draft.trim() || sending} style={{ padding:"8px 14px", fontSize:10, fontWeight:700, borderRadius:5, border:"none", cursor:draft.trim()&&!sending?"pointer":"not-allowed", background:S.acc, color:"#fff", opacity:draft.trim()&&!sending?1:0.4 }}>
+            {sending ? "..." : "Send"}
+          </button>
+        </div>
+      )}
 
       <div style={{ fontSize:8, color:S.dim, marginTop:6, fontFamily:"system-ui", textAlign:"center" }}>
         Messages saved with timestamps + km for documentary sync · Auto-refresh every 5s
