@@ -544,10 +544,10 @@ export default function App() {
     : { bg:"#050a12", card:"#111827", border:"#1f2937", acc:"#3b82f6", text:"#f3f4f6", mut:"#9ca3af", dim:"#6b7280" };
 
   // Primary tabs — essential while riding (big buttons)
-  // Chat placed beside Nav for easy access to observer comms from navigation view
+  // Map placed beside Nav for easy access to route + chat from navigation view
   const primaryTabs = [
     { id:"nav", l:"Nav", em:"🧭" },
-    { id:"map", l:"Chat", em:"💬" },
+    { id:"map", l:"Map", em:"🗺️" },
     { id:"tracker", l:"Track", em:"🚴" },
   ];
   // Secondary tabs — resting-only, accessed via overflow menu
@@ -936,7 +936,7 @@ function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullsc
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
           <span style={{ fontSize:22 }}>📣</span>
           <div style={{ flex:1 }}>
-            <div style={{ fontSize:14, fontWeight:800, color:ADV.text, fontFamily:"system-ui" }}>Rider Comms</div>
+            <div style={{ fontSize:14, fontWeight:800, color:ADV.text, fontFamily:"system-ui" }}>Join the Chat</div>
             <div style={{ fontSize:9, color:ADV.accent, fontFamily:"system-ui" }}>Live messages between the rider and the crew</div>
           </div>
         </div>
@@ -1551,7 +1551,7 @@ function ChatRoom({ state, kmDone, S }) {
       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
         <span style={{ fontSize:16 }}>💬</span>
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:S.text, fontFamily:"system-ui" }}>Rider Comms</div>
+          <div style={{ fontSize:12, fontWeight:700, color:S.text, fontFamily:"system-ui" }}>Join the Chat</div>
           <div style={{ fontSize:9, color:S.dim, fontFamily:"system-ui" }}>
             {messages.length} messages{nameSet && <> · as <b style={{ color:"#93c5fd" }}>{name}</b> <button onClick={()=>setNameSet(false)} style={{ marginLeft:2, background:"transparent", border:"none", color:S.dim, fontSize:8, cursor:"pointer", textDecoration:"underline", fontFamily:"system-ui" }}>change</button></>}
           </div>
