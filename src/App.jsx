@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { sb } from "./supabase";
 import LeafletMap from "./LeafletMap";
+import { fetchSegmentWeather } from "./weather";
 
 // ===== ROUTE DATA =====
 const SEGS = [
@@ -313,9 +314,21 @@ export default function App() {
   const [showGuide, setShowGuide] = useState(false);
   const [riderMode, setRiderMode] = useState(() => sessionStorage.getItem("rti-rider") === "1");
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [segWeather, setSegWeather] = useState(null);
   const timerRef = useRef(null);
   const watchRef = useRef(null);
   const gpsSyncRef = useRef(null);
+
+  // Fetch NEA weather every 15 min
+  useEffect(() => {
+    const load = async () => {
+      const data = await fetchSegmentWeather();
+      if (data) setSegWeather(data);
+    };
+    load();
+    const iv = setInterval(load, 15 * 60 * 1000);
+    return () => clearInterval(iv);
+  }, []);
 
   // Load state from localStorage
   useEffect(() => {
@@ -633,12 +646,12 @@ export default function App() {
 
       {/* ===== NAV ===== */}
       {tab === "nav" && (
-        <NavTab state={state} currentSeg={currentSeg} currentTurns={currentTurns} nextWp={nextWp} distToNextWp={distToNextWp} bearingToNextWp={bearingToNextWp} withinProximity={withinProximity} lastGps={lastGps} gpsTracking={gpsTracking} elapsed={elapsed()} kmDone={kmDone} kmLeft={kmLeft} pct={pct} completeSeg={completeSeg} pauseRide={pauseRide} resumeRide={resumeRide} setGpsTracking={setGpsTracking} requestWakeLock={requestWakeLock} wakeLock={wakeLock} brightness={brightness} setTab={setTab} S={S} />
+        <NavTab state={state} currentSeg={currentSeg} currentTurns={currentTurns} nextWp={nextWp} distToNextWp={distToNextWp} bearingToNextWp={bearingToNextWp} withinProximity={withinProximity} lastGps={lastGps} gpsTracking={gpsTracking} elapsed={elapsed()} kmDone={kmDone} kmLeft={kmLeft} pct={pct} completeSeg={completeSeg} pauseRide={pauseRide} resumeRide={resumeRide} setGpsTracking={setGpsTracking} requestWakeLock={requestWakeLock} wakeLock={wakeLock} brightness={brightness} setTab={setTab} segWeather={segWeather} S={S} />
       )}
 
       {/* ===== TRACKER ===== */}
       {tab === "tracker" && (
-        <TrackerTab state={state} startRide={startRide} pauseRide={pauseRide} resumeRide={resumeRide} resetRide={resetRide} loadAttemptById={loadAttemptById} completeSeg={completeSeg} undoSeg={undoSeg} addNote={addNote} elapsed={elapsed()} kmDone={kmDone} kmLeft={kmLeft} pct={pct} S={S} />
+        <TrackerTab state={state} startRide={startRide} pauseRide={pauseRide} resumeRide={resumeRide} resetRide={resetRide} loadAttemptById={loadAttemptById} completeSeg={completeSeg} undoSeg={undoSeg} addNote={addNote} elapsed={elapsed()} kmDone={kmDone} kmLeft={kmLeft} pct={pct} segWeather={segWeather} S={S} />
       )}
 
       {/* ===== MAP + CHAT ===== */}
@@ -973,7 +986,7 @@ function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullsc
 // ==========================================================================
 // NAV TAB
 // ==========================================================================
-function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearingToNextWp, withinProximity, lastGps, gpsTracking, elapsed, kmDone, kmLeft, pct, completeSeg, pauseRide, resumeRide, setGpsTracking, requestWakeLock, wakeLock, brightness, setTab, S }) {
+function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearingToNextWp, withinProximity, lastGps, gpsTracking, elapsed, kmDone, kmLeft, pct, completeSeg, pauseRide, resumeRide, setGpsTracking, requestWakeLock, wakeLock, brightness, setTab, segWeather, S }) {
   const [showStops, setShowStops] = useState(false);
   const [showTurns, setShowTurns] = useState(false);
   const [showChat, setShowChat] = useState(false);
@@ -1167,6 +1180,29 @@ function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearing
           <span style={{ background:currentSeg.c, color:"#fff", padding:"3px 8px", borderRadius:3, fontSize:9, fontWeight:700, flexShrink:0 }}>{currentSeg.d}</span>
         </div>
 
+        {/* NEA Weather for current + next segment */}
+        {segWeather?.segWeather && (()=>{
+          const curW = segWeather.segWeather[currentSeg.id];
+          const nextSegId = Math.min(currentSeg.id + 1, 11);
+          const nextW = segWeather.segWeather[nextSegId];
+          const trendArrow = (t) => t === "worse" ? " ↗ worsening" : t === "better" ? " ↘ improving" : "";
+          if (!curW) return null;
+          return (
+            <div style={{ display:"flex", gap:4, marginBottom:8, fontFamily:"system-ui" }}>
+              <div style={{ flex:1, padding:"6px 8px", background:`${curW.badge.color}15`, borderRadius:5, borderLeft:`3px solid ${curW.badge.color}` }}>
+                <div style={{ fontSize:7, color:S.mut, letterSpacing:1, marginBottom:1 }}>NOW · {curW.area}</div>
+                <div style={{ fontSize:10, color:curW.badge.color, fontWeight:700 }}>{curW.badge.icon} {curW.forecast}{trendArrow(curW.trend)}</div>
+              </div>
+              {nextW && nextSegId !== currentSeg.id && (
+                <div style={{ flex:1, padding:"6px 8px", background:`${nextW.badge.color}15`, borderRadius:5, borderLeft:`3px solid ${nextW.badge.color}` }}>
+                  <div style={{ fontSize:7, color:S.mut, letterSpacing:1, marginBottom:1 }}>NEXT · {nextW.area}</div>
+                  <div style={{ fontSize:10, color:nextW.badge.color, fontWeight:700 }}>{nextW.badge.icon} {nextW.forecast}{trendArrow(nextW.trend)}</div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Critical hazard warning — always visible if present */}
         {hasCriticalHazard && (
           <div style={{ padding:"8px 10px", background:"#2d1b00", borderRadius:5, fontSize:11, color:"#fbbf24", fontFamily:"system-ui", marginBottom:8, lineHeight:1.4, borderLeft:"3px solid #fbbf24" }}>
@@ -1334,7 +1370,7 @@ function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearing
 // ==========================================================================
 // TRACKER TAB
 // ==========================================================================
-function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, loadAttemptById, completeSeg, undoSeg, addNote, elapsed, kmDone, kmLeft, pct, S }) {
+function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, loadAttemptById, completeSeg, undoSeg, addNote, elapsed, kmDone, kmLeft, pct, segWeather, S }) {
   const [attempts, setAttempts] = useState(loadAttempts);
   const [showAttempts, setShowAttempts] = useState(false);
   const refreshAttempts = () => setAttempts(loadAttempts());
@@ -1431,7 +1467,13 @@ function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, loadAt
               <div style={{ width:24, height:24, borderRadius:"50%", background: s.completed ? s.c : "#1f2937", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:800, color: s.completed ? "#fff" : S.dim, flexShrink:0 }}>{s.completed ? "✓" : s.id}</div>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:10, fontWeight:700, fontFamily:"system-ui", color: s.completed ? "#22c55e" : isNext ? "#eab308" : S.text }}>{s.name}</div>
-                <div style={{ fontSize:8, color:S.dim }}>{s.km}km · {s.d}{segE ? ` · ${fmtTime(segE)}` : ""}</div>
+                <div style={{ fontSize:8, color:S.dim }}>
+                  {s.km}km · {s.d}{segE ? ` · ${fmtTime(segE)}` : ""}
+                  {segWeather?.segWeather?.[s.id] && !s.completed && (()=>{
+                    const w = segWeather.segWeather[s.id];
+                    return <span style={{ marginLeft:4, color:w.badge.color }}>{w.badge.icon} {w.forecast}{w.trend === "worse" ? " ↗" : w.trend === "better" ? " ↘" : ""}</span>;
+                  })()}
+                </div>
               </div>
               {isNext && state.status === "active" && <button onClick={()=>completeSeg(s.id)} style={{ padding:"5px 10px", fontSize:9, fontWeight:700, borderRadius:5, border:"none", cursor:"pointer", background:"#22c55e", color:"#000" }}>Done</button>}
               {s.completed && <button onClick={()=>undoSeg(s.id)} style={{ padding:"3px 6px", fontSize:8, borderRadius:3, border:`1px solid ${S.border}`, background:"transparent", color:S.dim, cursor:"pointer" }}>↺</button>}
