@@ -155,7 +155,7 @@ const PREP_TIMELINE = [
   ["Apr 14–16","Light spin 30min/day","Keep legs moving"],
   ["Apr 17 Thu","Final bike check","15km shakedown"],
   ["Apr 18 Fri","Pre-ride rest","Large meals, sleep bank"],
-  ["Apr 18 ~23:00","🚴 RIDE START (Blitz)","If going Apr 18"],
+  ["Apr 18 ~22:00","🚴 RIDE START (Blitz)","If going Apr 18"],
 ];
 
 const TIPS = [
@@ -289,8 +289,8 @@ const initState = () => ({
 });
 
 const DATE_INFO = {
-  apr10: { label:"Apr 10 Fri", sub:"Fri 23:00 → Sat 11:30", day:"Day 12 post-tx" },
-  apr11: { label:"Apr 11 Sat", sub:"Sat 23:00 → Sun 11:30", day:"Day 13 post-tx" },
+  apr10: { label:"Apr 10 Fri", sub:"Fri 22:00 → Sat 10:30", day:"Day 12 post-tx" },
+  apr11: { label:"Apr 11 Sat", sub:"Sat 22:00 → Sun 10:30", day:"Day 13 post-tx" },
 };
 
 // ==========================================================================
@@ -1317,12 +1317,12 @@ function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, loadAt
           <div style={{ fontSize:9, color:"#22c55e", fontWeight:700, marginBottom:-4, fontFamily:"system-ui" }}>★ RECOMMENDED</div>
           <button onClick={()=>startRide("apr11")} style={{ padding:"14px", fontSize:12, fontWeight:700, borderRadius:10, border:"2px solid #22c55e", background:"#22c55e11", color:"#22c55e", cursor:"pointer", textAlign:"left" }}>
             Apr 11 Sat · Blitz (Day 13)
-            <div style={{ fontSize:9, fontWeight:400, marginTop:2 }}>Sat 23:00 → Sun 11:30 · Auto-enables GPS + Wake Lock</div>
+            <div style={{ fontSize:9, fontWeight:400, marginTop:2 }}>Sat 22:00 → Sun 10:30 · Auto-enables GPS + Wake Lock</div>
           </button>
           <div style={{ fontSize:9, color:S.dim, fontWeight:700, marginBottom:-4, marginTop:4, fontFamily:"system-ui" }}>BACKUP</div>
           <button onClick={()=>startRide("apr10")} style={{ padding:"14px", fontSize:12, fontWeight:700, borderRadius:10, border:"2px solid #f97316", background:"#f9731611", color:"#f97316", cursor:"pointer", textAlign:"left" }}>
             Apr 10 Fri · Blitz (Day 12)
-            <div style={{ fontSize:9, fontWeight:400, marginTop:2 }}>Fri 23:00 → Sat 11:30 · Weather contingency</div>
+            <div style={{ fontSize:9, fontWeight:400, marginTop:2 }}>Fri 22:00 → Sat 10:30 · Weather contingency</div>
           </button>
         </div>
       </div>
@@ -1929,19 +1929,20 @@ function GuideModal({ onClose }) {
               <table style={{ width:"100%", fontSize:10, borderCollapse:"collapse", color:gS.mut }}>
                 <tbody>
                   {[
-                    ["23:00","Final bike check, carb meal"],
-                    ["00:00","START → ECP → Marina Bay → Keppel"],
-                    ["01:10","Lau Pa Sat water refill (5min)"],
-                    ["01:15","Keppel → West Coast → Jurong"],
-                    ["02:45","SPC Jalan Buroh refuel (10min)"],
-                    ["02:55","Jurong → Tuas → Lamp Post 1"],
-                    ["04:45","LP1! Photo + stretch (10min)"],
-                    ["04:55","Neo Tiew hills → LCK → Kranji"],
-                    ["07:00","Woodlands breakfast (30min) · Apply SPF50+"],
-                    ["07:30","Woodlands → Sembawang → Punggol → Changi"],
-                    ["09:30","Changi Village 2nd breakfast (20min)"],
-                    ["09:50","TMCR → ECP (beat peak heat)"],
-                    ["11:30","🏁 FINISH Marine Cove (~175km in ~11.5hr)"],
+                    ["19:00","Pre-ride meal (large carb meal)"],
+                    ["21:00","Final bike check, kit layout, sunscreen prep"],
+                    ["22:00","🚴 START → ECP → Marina Bay → Keppel"],
+                    ["00:10","Lau Pa Sat water refill (5min)"],
+                    ["00:15","Keppel → West Coast → Jurong"],
+                    ["01:45","SPC Jalan Buroh refuel (10min)"],
+                    ["01:55","Jurong → Tuas → Lamp Post 1"],
+                    ["03:45","LP1! Photo + stretch (10min)"],
+                    ["03:55","Neo Tiew hills → LCK → Kranji"],
+                    ["06:00","Woodlands breakfast (30min) · Apply SPF50+"],
+                    ["06:30","Woodlands → Sembawang → Punggol → Changi"],
+                    ["08:30","Changi Village 2nd breakfast (20min)"],
+                    ["08:50","TMCR → ECP (beat peak heat)"],
+                    ["10:30","🏁 FINISH Marine Cove (~170km in ~12.5hr)"],
                   ].map((row,i) => (
                     <tr key={i} style={{ borderBottom:`1px solid ${gS.border}` }}>
                       <td style={{ padding:"4px", fontWeight:700, color:gS.text, minWidth:50 }}>{row[0]}</td>
