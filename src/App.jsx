@@ -593,7 +593,7 @@ export default function App() {
   if (!riderMode) {
     return (
       <div style={{ fontFamily:"'JetBrains Mono','SF Mono',monospace", background:S.bg, color:S.text, minHeight:"100vh", padding:10 }}>
-        <ObserverView S={S} brightness={brightness} setBrightness={setBrightness} toggleFullscreen={toggleFullscreen} isFullscreen={isFullscreen} unlockRider={unlockRider} />
+        <ObserverView S={S} brightness={brightness} setBrightness={setBrightness} toggleFullscreen={toggleFullscreen} isFullscreen={isFullscreen} unlockRider={unlockRider} segWeather={segWeather} />
         {showGuide && <GuideModal onClose={()=>setShowGuide(false)} />}
       </div>
     );
@@ -656,7 +656,7 @@ export default function App() {
 
       {/* ===== MAP + CHAT ===== */}
       {tab === "map" && (
-        <MapChatTab state={state} lastGps={lastGps} gpsTracking={gpsTracking} nextWp={nextWp} kmDone={kmDone} pct={pct} brightness={brightness} S={S} />
+        <MapChatTab state={state} lastGps={lastGps} gpsTracking={gpsTracking} nextWp={nextWp} kmDone={kmDone} pct={pct} brightness={brightness} segWeather={segWeather} S={S} />
       )}
 
       {/* ===== SYNC ===== */}
@@ -707,7 +707,7 @@ const ADV = {
   route: "#0891b2",        // cyan trail
 };
 
-function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullscreen, unlockRider }) {
+function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullscreen, unlockRider, segWeather }) {
   const [ride, setRide] = useState(null);
   const [pinInput, setPinInput] = useState("");
   const [showPin, setShowPin] = useState(false);
@@ -892,7 +892,7 @@ function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullsc
           </div>
           <button onClick={()=>window.open(`https://connect.garmin.com/modern/course/446685371`,"_blank")} style={{ padding:"4px 10px", fontSize:9, fontWeight:700, borderRadius:4, border:`1px solid ${ADV.border}`, background:"transparent", color:ADV.mut, cursor:"pointer", fontFamily:"system-ui" }}>View Route ↗</button>
         </div>
-        <LeafletMap riderGps={riderGps} segments={segments} kmDone={kmDone} brightness={brightness} height={420} />
+        <LeafletMap riderGps={riderGps} segments={segments} kmDone={kmDone} brightness={brightness} height={420} weatherOverlay={segWeather?.areaOverlay} />
         {riderGps && (
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:6, padding:"5px 10px", background:"rgba(101, 163, 13, 0.15)", borderRadius:4, border:`1px solid ${ADV.success}33` }}>
             <div style={{ fontSize:9, color:ADV.success, fontFamily:"system-ui", fontWeight:700 }}>
@@ -1490,7 +1490,7 @@ function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, loadAt
 // ==========================================================================
 // MAP + CHAT TAB
 // ==========================================================================
-function MapChatTab({ state, lastGps, gpsTracking, nextWp, kmDone, pct, brightness, S }) {
+function MapChatTab({ state, lastGps, gpsTracking, nextWp, kmDone, pct, brightness, segWeather, S }) {
   // Build riderGps shape compatible with LeafletMap
   const riderGps = lastGps ? { lat: lastGps.lat, lng: lastGps.lng, speed: lastGps.speed, t: lastGps.t } : null;
 
@@ -1508,7 +1508,7 @@ function MapChatTab({ state, lastGps, gpsTracking, nextWp, kmDone, pct, brightne
             </div>
           </div>
         </div>
-        <LeafletMap riderGps={riderGps} segments={state.segments} kmDone={kmDone} brightness={brightness} height={360} />
+        <LeafletMap riderGps={riderGps} segments={state.segments} kmDone={kmDone} brightness={brightness} height={360} weatherOverlay={segWeather?.areaOverlay} />
       </div>
 
       {/* Segment progress bar */}

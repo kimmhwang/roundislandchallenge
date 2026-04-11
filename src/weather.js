@@ -87,6 +87,36 @@ const mapForecastToSegments = (forecasts, prevSegWeather) => {
   return segWeather;
 };
 
+// NEA area coordinates (from area_metadata)
+const AREA_COORDS = {
+  "Marine Parade": [1.297, 103.891], "City": [1.292, 103.844],
+  "Bukit Merah": [1.277, 103.819], "Clementi": [1.315, 103.76],
+  "Jurong West": [1.34039, 103.705], "Boon Lay": [1.304, 103.701],
+  "Tuas": [1.294947, 103.635], "Jalan Bahar": [1.347, 103.67],
+  "Lim Chu Kang": [1.423, 103.717332], "Woodlands": [1.432, 103.786528],
+  "Sembawang": [1.445, 103.818495], "Yishun": [1.418, 103.839],
+  "Sengkang": [1.384, 103.891443], "Punggol": [1.401, 103.904],
+  "Pasir Ris": [1.37, 103.948], "Changi": [1.357, 103.987],
+  "Bedok": [1.321, 103.924],
+};
+
+// Build area weather map for map overlay: [{ area, lat, lng, forecast, badge }]
+const buildAreaWeatherOverlay = (forecasts) => {
+  const overlay = [];
+  for (const f of forecasts) {
+    const coords = AREA_COORDS[f.area];
+    if (!coords) continue;
+    overlay.push({
+      area: f.area,
+      lat: coords[0],
+      lng: coords[1],
+      forecast: f.forecast,
+      badge: weatherBadge(f.forecast),
+    });
+  }
+  return overlay;
+};
+
 // Fetch and return segment weather
 let _prevSegWeather = null;
 
@@ -100,9 +130,11 @@ export const fetchSegmentWeather = async () => {
 
     const segWeather = mapForecastToSegments(items.forecasts, _prevSegWeather);
     _prevSegWeather = segWeather;
+    const areaOverlay = buildAreaWeatherOverlay(items.forecasts);
 
     return {
       segWeather,
+      areaOverlay,
       validPeriod: items.valid_period,
       updatedAt: items.update_timestamp,
     };

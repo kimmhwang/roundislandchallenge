@@ -22,8 +22,8 @@ function FitBounds({ points }) {
   return null;
 }
 
-// Custom controls — full view + locate rider
-function MapControls({ points, riderGps }) {
+// Custom controls — full view + locate rider + weather toggle
+function MapControls({ points, riderGps, showWeather, onToggleWeather, hasWeather }) {
   const map = useMap();
 
   const fitRoute = () => {
@@ -37,7 +37,6 @@ function MapControls({ points, riderGps }) {
     if (riderGps?.lat && riderGps?.lng) {
       map.setView([riderGps.lat, riderGps.lng], 15);
     } else if (points.length > 0) {
-      // Fall back to start of route
       map.setView(points[0], 14);
     }
   };
@@ -59,20 +58,13 @@ function MapControls({ points, riderGps }) {
 
   return (
     <div style={{ position:"absolute", top:10, right:10, zIndex:1000, display:"flex", flexDirection:"column" }}>
-      <button
-        onClick={fitRoute}
-        title="Full route view"
-        style={btnStyle}
-      >
-        🗺️
-      </button>
-      <button
-        onClick={locateRider}
-        title={riderGps ? "Locate rider" : "Jump to start"}
-        style={{ ...btnStyle, opacity: riderGps ? 1 : 0.7 }}
-      >
-        📍
-      </button>
+      <button onClick={fitRoute} title="Full route view" style={btnStyle}>🗺️</button>
+      <button onClick={locateRider} title={riderGps ? "Locate rider" : "Jump to start"} style={{ ...btnStyle, opacity: riderGps ? 1 : 0.7 }}>📍</button>
+      {hasWeather && (
+        <button onClick={onToggleWeather} title={showWeather ? "Hide weather" : "Show weather"} style={{ ...btnStyle, background: showWeather ? "#fef3c7" : "#ffffff", border: showWeather ? "2px solid #f59e0b" : "2px solid rgba(0,0,0,0.2)" }}>
+          {showWeather ? "⛅" : "☀️"}
+        </button>
+      )}
     </div>
   );
 }
@@ -90,10 +82,11 @@ const parseGpx = (xml) => {
   return points;
 };
 
-export default function LeafletMap({ riderGps, segments, kmDone, brightness, height = 400 }) {
+export default function LeafletMap({ riderGps, segments, kmDone, brightness, height = 400, weatherOverlay }) {
   const [routePoints, setRoutePoints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showWeather, setShowWeather] = useState(true);
 
   // Load route.gpx once
   useEffect(() => {
@@ -145,7 +138,7 @@ export default function LeafletMap({ riderGps, segments, kmDone, brightness, hei
       >
         <TileLayer url={tileUrl} attribution={tileAttribution} subdomains="abcd" maxZoom={18} bounds={SG_BOUNDS} />
         <FitBounds points={routePoints} />
-        <MapControls points={routePoints} riderGps={riderGps} />
+        <MapControls points={routePoints} riderGps={riderGps} showWeather={showWeather} onToggleWeather={()=>setShowWeather(!showWeather)} hasWeather={weatherOverlay?.length > 0} />
 
         {/* Remaining route — blue */}
         <Polyline positions={remainingPath} pathOptions={{ color:"#3b82f6", weight:4, opacity:0.85 }} />
@@ -162,7 +155,24 @@ export default function LeafletMap({ riderGps, segments, kmDone, brightness, hei
           </CircleMarker>
         )}
 
-        {/* Live rider position */}
+        {/* Weather overlay — semi-transparent colored circles at NEA area locations */}
+        {showWeather && weatherOverlay?.map(w => (
+          <CircleMarker
+            key={w.area}
+            center={[w.lat, w.lng]}
+            radius={22}
+            pathOptions={{ color: w.badge.color, fillColor: w.badge.color, fillOpacity: 0.25, weight: 2, opacity: 0.7 }}
+          >
+            <Popup>
+              <div style={{ fontFamily:"system-ui", fontSize:12, minWidth:120 }}>
+                <div style={{ fontWeight:700, marginBottom:4 }}>{w.area}</div>
+                <div style={{ fontSize:16 }}>{w.badge.icon} {w.forecast}</div>
+              </div>
+            </Popup>
+          </CircleMarker>
+        ))}
+
+        {/* Live rider position — on top of everything */}
         {riderGps && riderGps.lat && riderGps.lng && (
           <CircleMarker
             center={[riderGps.lat, riderGps.lng]}
