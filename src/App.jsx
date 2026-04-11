@@ -382,8 +382,8 @@ export default function App() {
     if (!navigator.geolocation) { setGpsError("Geolocation not supported"); setGpsTracking(false); return; }
     watchRef.current = navigator.geolocation.watchPosition(
       (pos) => {
-        const { latitude, longitude, speed, accuracy } = pos.coords;
-        const pt = { lat:latitude, lng:longitude, speed:speed?speed*3.6:null, accuracy, t:Date.now() };
+        const { latitude, longitude, speed, accuracy, heading: gpsHeading } = pos.coords;
+        const pt = { lat:latitude, lng:longitude, speed:speed?speed*3.6:null, accuracy, heading: (gpsHeading != null && !isNaN(gpsHeading)) ? gpsHeading : null, t:Date.now() };
         setLastGps(pt); setGpsError(null);
         setState(prev => {
           if (accuracy > 50) return prev;
@@ -1096,7 +1096,15 @@ function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearing
       <div style={{ background: withinProximity ? "#1a2e1a" : S.card, borderRadius:10, padding:14, marginBottom:8, border:`2px solid ${withinProximity?"#22c55e":S.border}`, transition:"all 0.3s" }}>
         <div style={{ fontSize:9, color:S.mut, letterSpacing:2, marginBottom:4 }}>NEXT WAYPOINT</div>
         <div style={{ fontSize:16, fontWeight:800, color:S.text, fontFamily:"system-ui", marginBottom:8 }}>{nextWp.name}</div>
-        {lastGps && distToNextWp !== null ? (
+        {lastGps && distToNextWp !== null ? (()=>{
+          // Heading-up compass: if rider has GPS heading (moving), show relative bearing
+          // so "up" = direction you're traveling. If stationary, fall back to north-up.
+          const riderHeading = lastGps.heading; // degrees from north (GPS direction of travel)
+          const hasHeading = riderHeading != null && lastGps.speed > 3; // only trust heading if moving >3 km/h
+          const relativeBearing = hasHeading ? ((bearingToNextWp - riderHeading + 360) % 360) : bearingToNextWp;
+          const compassRotation = hasHeading ? -riderHeading : 0; // rotate entire compass ring so N moves
+
+          return (
           <div style={{ display:"flex", gap:12, alignItems:"center" }}>
             <div style={{ flex:1 }}>
               <div style={{ fontSize:42, fontWeight:800, color: withinProximity?"#22c55e":"#fbbf24", fontVariantNumeric:"tabular-nums", lineHeight:1, fontFamily:"system-ui" }}>
@@ -1105,19 +1113,43 @@ function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearing
               <div style={{ fontSize:9, color:S.dim, marginTop:2 }}>{distToNextWp < 1 ? "METRES" : "KM"} · STRAIGHT</div>
             </div>
             <div style={{ textAlign:"center" }}>
-              <div style={{ width:72, height:72 }}>
+              <div style={{ width:80, height:80 }}>
                 <svg viewBox="0 0 60 60" style={{ width:"100%", height:"100%" }}>
-                  <circle cx="30" cy="30" r="26" fill="none" stroke={S.border} strokeWidth="2" />
-                  <g transform={`rotate(${bearingToNextWp} 30 30)`}>
-                    <polygon points="30,8 38,34 30,28 22,34" fill="#fbbf24" />
+                  {/* Compass ring + cardinal labels — rotates with rider heading */}
+                  <g transform={`rotate(${compassRotation} 30 30)`} style={{ transition:"transform 0.5s ease-out" }}>
+                    <circle cx="30" cy="30" r="26" fill="none" stroke={S.border} strokeWidth="1.5" />
+                    {/* Cardinal direction ticks */}
+                    <text x="30" y="7" fill="#ef4444" fontSize="6" fontWeight="800" textAnchor="middle">N</text>
+                    <text x="54" y="32" fill={S.dim} fontSize="5" textAnchor="middle">E</text>
+                    <text x="30" y="57" fill={S.dim} fontSize="5" textAnchor="middle">S</text>
+                    <text x="6" y="32" fill={S.dim} fontSize="5" textAnchor="middle">W</text>
                   </g>
-                  <text x="30" y="8" fill={S.mut} fontSize="6" textAnchor="middle">N</text>
+                  {/* Rider heading indicator (your direction = up) */}
+                  {hasHeading && (
+                    <polygon points="30,4 32,10 28,10" fill={S.mut} opacity="0.6" />
+                  )}
+                  {/* Waypoint arrow — points toward the waypoint */}
+                  <g transform={`rotate(${relativeBearing} 30 30)`}>
+                    <polygon points="30,8 37,33 30,27 23,33" fill="#fbbf24" />
+                  </g>
+                  {/* Center dot */}
+                  <circle cx="30" cy="30" r="2" fill={S.text} opacity="0.5" />
                 </svg>
               </div>
-              <div style={{ fontSize:11, color:S.text, fontWeight:700, marginTop:2 }}>{bearingCompass(bearingToNextWp)} {bearingToNextWp.toFixed(0)}°</div>
+              <div style={{ fontSize:10, color:S.text, fontWeight:700, marginTop:2 }}>
+                {hasHeading
+                  ? (relativeBearing < 20 || relativeBearing > 340 ? "AHEAD"
+                     : relativeBearing < 160 ? `↻ ${relativeBearing.toFixed(0)}° RIGHT`
+                     : relativeBearing < 200 ? "BEHIND"
+                     : `↺ ${(360 - relativeBearing).toFixed(0)}° LEFT`)
+                  : `${bearingCompass(bearingToNextWp)} ${bearingToNextWp.toFixed(0)}°`}
+              </div>
+              {hasHeading && <div style={{ fontSize:7, color:S.dim, marginTop:1 }}>heading-up</div>}
+              {!hasHeading && <div style={{ fontSize:7, color:S.dim, marginTop:1 }}>north-up</div>}
             </div>
           </div>
-        ) : (
+          );
+        })() : (
           <div style={{ fontSize:12, color:S.mut, fontFamily:"system-ui", padding:"8px 0" }}>
             {gpsTracking ? "📡 Acquiring GPS..." : "⚠️ Enable GPS in Sync tab"}
           </div>
