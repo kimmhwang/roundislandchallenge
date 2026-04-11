@@ -156,21 +156,25 @@ export default function LeafletMap({ riderGps, segments, kmDone, brightness, hei
         )}
 
         {/* Weather overlay — semi-transparent colored circles at NEA area locations */}
-        {showWeather && weatherOverlay?.map(w => (
-          <CircleMarker
-            key={w.area}
-            center={[w.lat, w.lng]}
-            radius={22}
-            pathOptions={{ color: w.badge.color, fillColor: w.badge.color, fillOpacity: 0.25, weight: 2, opacity: 0.7 }}
-          >
-            <Popup>
-              <div style={{ fontFamily:"system-ui", fontSize:12, minWidth:120 }}>
-                <div style={{ fontWeight:700, marginBottom:4 }}>{w.area}</div>
-                <div style={{ fontSize:16 }}>{w.badge.icon} {w.forecast}</div>
-              </div>
-            </Popup>
-          </CircleMarker>
-        ))}
+        {showWeather && weatherOverlay?.map(w => {
+          const isThunder = w.forecast.toLowerCase().includes("thunder");
+          return (
+            <CircleMarker
+              key={w.area}
+              center={[w.lat, w.lng]}
+              radius={isThunder ? 26 : 22}
+              pathOptions={{ color: w.badge.color, fillColor: w.badge.color, fillOpacity: isThunder ? 0.4 : 0.25, weight: isThunder ? 3 : 2, opacity: isThunder ? 0.9 : 0.7, dashArray: isThunder ? "4 4" : undefined }}
+            >
+              <Popup>
+                <div style={{ fontFamily:"system-ui", fontSize:12, minWidth:120 }}>
+                  <div style={{ fontWeight:700, marginBottom:4 }}>{w.area}</div>
+                  <div style={{ fontSize:16 }}>{w.badge.icon} {w.forecast}</div>
+                  {isThunder && <div style={{ fontSize:11, color:"#ef4444", fontWeight:700, marginTop:4 }}>⚡ LIGHTNING RISK</div>}
+                </div>
+              </Popup>
+            </CircleMarker>
+          );
+        })}
 
         {/* Live rider position — on top of everything */}
         {riderGps && riderGps.lat && riderGps.lng && (

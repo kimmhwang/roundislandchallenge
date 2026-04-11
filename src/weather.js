@@ -143,4 +143,17 @@ export const fetchSegmentWeather = async () => {
   }
 };
 
+// Lightning alert — derived from thunderstorm forecasts
+// Returns array of areas with lightning risk along the route
+export const getLightningAlerts = (areaOverlay) => {
+  if (!areaOverlay) return [];
+  return areaOverlay.filter(w => w.forecast.toLowerCase().includes("thunder")).map(w => ({
+    area: w.area,
+    lat: w.lat,
+    lng: w.lng,
+    forecast: w.forecast,
+    isHeavy: w.forecast.toLowerCase().includes("heavy"),
+  }));
+};
+
 export { weatherBadge, severityOf };

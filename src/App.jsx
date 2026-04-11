@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { sb } from "./supabase";
 import LeafletMap from "./LeafletMap";
-import { fetchSegmentWeather } from "./weather";
+import { fetchSegmentWeather, getLightningAlerts } from "./weather";
 
 // ===== ROUTE DATA =====
 const SEGS = [
@@ -820,6 +820,9 @@ function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullsc
         </div>
       </div>
 
+      {/* Lightning alert */}
+      <LightningAlert segWeather={segWeather} />
+
       {/* YouTube Live Stream — Burst Mode */}
       {ytEmbed && (
         <div style={{ background:ADV.card, borderRadius:10, padding:10, border:`2px solid ${streamLive ? "#ef4444" : ADV.border}`, marginBottom:10 }}>
@@ -1078,6 +1081,9 @@ function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearing
           )}
         </div>
       )}
+
+      {/* Lightning alert — if any route area has thunderstorms */}
+      <LightningAlert segWeather={segWeather} />
 
       {/* HERO STATS — always visible, glanceable at speed */}
       <div style={{ background:S.card, borderRadius:10, padding:"10px 12px", marginBottom:8, border:`1px solid ${S.border}` }}>
@@ -2510,6 +2516,47 @@ function NoteInput({ onAdd, S }) {
     <div style={{ display:"flex", gap:3 }}>
       <input value={v} onChange={e=>setV(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){onAdd(v);setV("");}}} placeholder="Add note..." style={{ flex:1, padding:"7px 8px", fontSize:10, borderRadius:5, border:`1px solid ${S.border}`, background:S.card, color:S.text, outline:"none", fontFamily:"system-ui" }} />
       <button onClick={()=>{onAdd(v);setV("");}} style={{ padding:"7px 10px", fontSize:9, fontWeight:700, borderRadius:5, border:"none", cursor:"pointer", background:S.acc, color:"#fff" }}>+</button>
+    </div>
+  );
+}
+
+function LightningAlert({ segWeather }) {
+  const alerts = getLightningAlerts(segWeather?.areaOverlay);
+  if (alerts.length === 0) return null;
+  const hasHeavy = alerts.some(a => a.isHeavy);
+  return (
+    <div style={{ background: hasHeavy ? "#3d0a0a" : "#2d1b00", borderRadius:8, padding:12, marginBottom:8, border:`2px solid ${hasHeavy ? "#ef4444" : "#fbbf24"}`, fontFamily:"system-ui" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+        <span style={{ fontSize:22 }}>⚡</span>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:12, fontWeight:800, color: hasHeavy ? "#fca5a5" : "#fde68a" }}>
+            {hasHeavy ? "HEAVY THUNDERSTORM WARNING" : "LIGHTNING ALERT"}
+          </div>
+          <div style={{ fontSize:9, color: hasHeavy ? "#fca5a5" : "#fbbf24" }}>
+            NEA reports thundery conditions along your route
+          </div>
+        </div>
+      </div>
+      <div style={{ fontSize:10, color:"#fde68a", lineHeight:1.5, marginBottom:8 }}>
+        {alerts.map(a => (
+          <div key={a.area} style={{ display:"flex", gap:6, alignItems:"center", marginBottom:2 }}>
+            <span style={{ color: a.isHeavy ? "#ef4444" : "#fbbf24" }}>⛈️</span>
+            <span><b>{a.area}</b> — {a.forecast}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize:9, color:"#d4d4d4", lineHeight:1.5, padding:"8px 10px", background:"rgba(0,0,0,0.3)", borderRadius:5 }}>
+        <div><b>If you see lightning or hear thunder:</b></div>
+        <div>• Get off the bike immediately — do NOT ride</div>
+        <div>• Shelter under concrete structure (bus stop, void deck)</div>
+        <div>• Do NOT shelter under isolated trees</div>
+        <div>• Wait 20 min after last flash before resuming</div>
+        <div style={{ marginTop:4 }}>
+          <a href="https://www.weather.gov.sg/lightning/" target="_blank" rel="noopener noreferrer" style={{ color:"#93c5fd", fontSize:9 }}>
+            📡 NEA Live Lightning Map ↗
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
