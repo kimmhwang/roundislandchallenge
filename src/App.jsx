@@ -5,17 +5,17 @@ import { fetchSegmentWeather, getLightningAlerts } from "./weather";
 
 // ===== ROUTE DATA =====
 const SEGS = [
-  { id:1, name:"ECP → Marina Bay", km:15, d:"Easy", c:"#22c55e", ts:22 },
+  { id:1, name:"ECP → Marina Bay", km:5, d:"Easy", c:"#22c55e", ts:22 },
   { id:2, name:"Marina Bay → Keppel", km:8, d:"Easy", c:"#22c55e", ts:22 },
-  { id:3, name:"Keppel → West Coast", km:12, d:"Easy–Mod", c:"#eab308", ts:20 },
-  { id:4, name:"West Coast → Jurong", km:14, d:"Moderate", c:"#f97316", ts:18 },
-  { id:5, name:"Jurong → Tuas LP1", km:28, d:"Hard", c:"#ef4444", ts:16 },
-  { id:6, name:"Tuas → Lim Chu Kang", km:18, d:"Hard", c:"#ef4444", ts:14 },
-  { id:7, name:"LCK → Woodlands", km:16, d:"Moderate", c:"#f97316", ts:17 },
-  { id:8, name:"Woodlands → Yishun", km:14, d:"Easy–Mod", c:"#eab308", ts:19 },
+  { id:3, name:"Keppel → West Coast", km:6, d:"Easy–Mod", c:"#eab308", ts:20 },
+  { id:4, name:"West Coast → Jurong", km:10, d:"Moderate", c:"#f97316", ts:18 },
+  { id:5, name:"Jurong → Tuas LP1", km:19, d:"Hard", c:"#ef4444", ts:16 },
+  { id:6, name:"Tuas → Lim Chu Kang", km:30, d:"Hard", c:"#ef4444", ts:14 },
+  { id:7, name:"LCK → Woodlands", km:20, d:"Moderate", c:"#f97316", ts:17 },
+  { id:8, name:"Woodlands → Yishun", km:8, d:"Easy–Mod", c:"#eab308", ts:19 },
   { id:9, name:"Yishun → Pasir Ris", km:18, d:"Easy", c:"#22c55e", ts:22 },
-  { id:10, name:"Changi → TMCR", km:18, d:"Moderate", c:"#f97316", ts:18 },
-  { id:11, name:"TMCR → ECP Finish", km:10, d:"Easy", c:"#22c55e", ts:20 },
+  { id:10, name:"Changi → TMCR", km:19, d:"Moderate", c:"#f97316", ts:18 },
+  { id:11, name:"TMCR → ECP Finish", km:28, d:"Easy", c:"#22c55e", ts:20 },
 ];
 const TOTAL_KM = SEGS.reduce((s,v)=>s+v.km, 0);
 
@@ -152,7 +152,7 @@ const PREP_TIMELINE = [
   ["Apr 15 Wed","Rest","Light walking only"],
   ["Apr 16 Thu","20km moderate + carry tubular spare","Final shakedown with backup"],
   ["Apr 17 Fri","Pre-ride rest","Large carb meal, hydrate, sleep bank"],
-  ["Apr 18 Sat ~22:00","🚴 ATTEMPT 2 START (Blitz)","Carry 2x spare tubulars"],
+  ["Apr 18 Sat ~20:00","🚴 ATTEMPT 2 START (Blitz)","Carry 2x spare tubulars · 09:00 finish"],
 ];
 
 const TIPS = [
@@ -325,8 +325,8 @@ const initState = () => ({
 });
 
 const DATE_INFO = {
-  apr17: { label:"Apr 17 Fri", sub:"Fri 22:00 → Sat 10:30", day:"Day 19 post-tx" },
-  apr18: { label:"Apr 18 Sat", sub:"Sat 22:00 → Sun 10:30", day:"Day 20 post-tx" },
+  apr17: { label:"Apr 17 Fri", sub:"Fri 20:00 → Sat 09:00", day:"Day 19 post-tx" },
+  apr18: { label:"Apr 18 Sat", sub:"Sat 20:00 → Sun 09:00", day:"Day 20 post-tx" },
 };
 
 // ==========================================================================
@@ -818,6 +818,42 @@ function ObserverView({ S, brightness, setBrightness, toggleFullscreen, isFullsc
         <div style={{ display:"flex", gap:4 }}>
           <button onClick={()=>setBrightness(brightness==="night"?"normal":"night")} style={{ padding:"4px 8px", fontSize:9, border:`1px solid ${ADV.border}`, borderRadius:4, background:brightness==="night"?ADV.accent2:"transparent", color:ADV.text, cursor:"pointer" }}>{brightness==="night"?"☀️":"🌙"}</button>
           <button onClick={toggleFullscreen} style={{ padding:"4px 8px", fontSize:9, border:`1px solid ${ADV.border}`, borderRadius:4, background:"transparent", color:ADV.text, cursor:"pointer" }}>{isFullscreen?"⤓":"⤢"}</button>
+        </div>
+      </div>
+
+      {/* ANNOUNCEMENT BANNER — ride updates */}
+      <div style={{ background:`linear-gradient(135deg, #1a0d2e 0%, #2d1b00 100%)`, borderRadius:12, padding:14, border:`2px solid ${ADV.accent}`, marginBottom:10, position:"relative" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+          <span style={{ fontSize:20 }}>📣</span>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:10, letterSpacing:3, color:ADV.accent, fontWeight:800, fontFamily:"system-ui" }}>RIDE ANNOUNCEMENT</div>
+            <div style={{ fontSize:13, fontWeight:800, color:ADV.text, fontFamily:"system-ui" }}>Attempt 2 — Sat Apr 18</div>
+          </div>
+          <div style={{ textAlign:"right" }}>
+            <div style={{ fontSize:9, color:ADV.mut, fontFamily:"system-ui" }}>START</div>
+            <div style={{ fontSize:18, fontWeight:800, color:ADV.accent, fontFamily:"system-ui", lineHeight:1 }}>20:00</div>
+            <div style={{ fontSize:8, color:ADV.mut, fontFamily:"system-ui" }}>SGT</div>
+          </div>
+        </div>
+        <div style={{ fontSize:10, color:"#e5e5e5", lineHeight:1.5, fontFamily:"system-ui", marginBottom:6 }}>
+          2nd attempt after Apr 11 puncture at km 77. Route updated to <b style={{ color:ADV.accent }}>V1.1</b> (170.9 km, 17 new waypoints).
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, fontSize:9 }}>
+          <div style={{ background:"rgba(0,0,0,0.3)", padding:"6px 8px", borderRadius:4 }}>
+            <div style={{ color:ADV.mut, fontSize:7, letterSpacing:1 }}>START</div>
+            <div style={{ color:ADV.text, fontWeight:700 }}>Sat 20:00</div>
+          </div>
+          <div style={{ background:"rgba(0,0,0,0.3)", padding:"6px 8px", borderRadius:4 }}>
+            <div style={{ color:ADV.mut, fontSize:7, letterSpacing:1 }}>TARGET FINISH</div>
+            <div style={{ color:ADV.success, fontWeight:700 }}>Sun 09:00</div>
+          </div>
+          <div style={{ background:"rgba(0,0,0,0.3)", padding:"6px 8px", borderRadius:4 }}>
+            <div style={{ color:ADV.mut, fontSize:7, letterSpacing:1 }}>DURATION</div>
+            <div style={{ color:ADV.route, fontWeight:700 }}>~13 hours</div>
+          </div>
+        </div>
+        <div style={{ fontSize:8, color:ADV.mut, marginTop:8, fontFamily:"system-ui", lineHeight:1.4 }}>
+          <b style={{ color:ADV.text }}>Updates:</b> New Garmin course (V1.1) with 17 checkpoints · 2x spare tubulars onboard · Schedule shifted earlier for 9am finish ahead of heat
         </div>
       </div>
 
@@ -1440,12 +1476,12 @@ function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, loadAt
           <div style={{ fontSize:9, color:"#22c55e", fontWeight:700, marginBottom:-4, fontFamily:"system-ui" }}>★ RECOMMENDED</div>
           <button onClick={()=>startRide("apr18")} style={{ padding:"14px", fontSize:12, fontWeight:700, borderRadius:10, border:"2px solid #22c55e", background:"#22c55e11", color:"#22c55e", cursor:"pointer", textAlign:"left" }}>
             Apr 18 Sat · Blitz (Day 20)
-            <div style={{ fontSize:9, fontWeight:400, marginTop:2 }}>Sat 22:00 → Sun 10:30 · Auto-enables GPS + Wake Lock</div>
+            <div style={{ fontSize:9, fontWeight:400, marginTop:2 }}>Sat 20:00 → Sun 09:00 · Auto-enables GPS + Wake Lock</div>
           </button>
           <div style={{ fontSize:9, color:S.dim, fontWeight:700, marginBottom:-4, marginTop:4, fontFamily:"system-ui" }}>BACKUP</div>
           <button onClick={()=>startRide("apr17")} style={{ padding:"14px", fontSize:12, fontWeight:700, borderRadius:10, border:"2px solid #f97316", background:"#f9731611", color:"#f97316", cursor:"pointer", textAlign:"left" }}>
             Apr 17 Fri · Blitz (Day 19)
-            <div style={{ fontSize:9, fontWeight:400, marginTop:2 }}>Fri 22:00 → Sat 10:30 · Weather contingency</div>
+            <div style={{ fontSize:9, fontWeight:400, marginTop:2 }}>Fri 20:00 → Sat 09:00 · Weather contingency</div>
           </button>
         </div>
       </div>
@@ -2113,20 +2149,20 @@ function GuideModal({ onClose }) {
               <table style={{ width:"100%", fontSize:10, borderCollapse:"collapse", color:gS.mut }}>
                 <tbody>
                   {[
-                    ["19:00","Pre-ride meal (large carb meal)"],
-                    ["21:00","Final bike check, kit layout, sunscreen prep"],
-                    ["22:00","🚴 START → ECP → Marina Bay → Keppel"],
-                    ["00:10","Lau Pa Sat water refill (5min)"],
-                    ["00:15","Keppel → West Coast → Jurong"],
-                    ["01:45","SPC Jalan Buroh refuel (10min)"],
-                    ["01:55","Jurong → Tuas → Lamp Post 1"],
-                    ["03:45","LP1! Photo + stretch (10min)"],
-                    ["03:55","Neo Tiew hills → LCK → Kranji"],
-                    ["06:00","Woodlands breakfast (30min) · Apply SPF50+"],
-                    ["06:30","Woodlands → Sembawang → Punggol → Changi"],
-                    ["08:30","Changi Village 2nd breakfast (20min)"],
-                    ["08:50","TMCR → ECP (beat peak heat)"],
-                    ["10:30","🏁 FINISH Marine Cove (~170km in ~12.5hr)"],
+                    ["17:00","Pre-ride meal (large carb meal)"],
+                    ["19:00","Final bike check, kit layout, sunscreen prep"],
+                    ["20:00","🚴 START → ECP → Marina Bay → Keppel"],
+                    ["22:10","Lau Pa Sat water refill (5min)"],
+                    ["22:15","Keppel → West Coast → Jurong"],
+                    ["23:45","SPC Jalan Buroh refuel (10min)"],
+                    ["23:55","Jurong → Tuas → Lamp Post 1"],
+                    ["01:45","LP1! Photo + stretch (10min)"],
+                    ["01:55","Neo Tiew hills → LCK → Kranji"],
+                    ["04:30","Woodlands breakfast (30min) · Apply SPF50+"],
+                    ["05:00","Woodlands → Sembawang → Punggol → Changi"],
+                    ["07:00","Changi Village 2nd breakfast (20min)"],
+                    ["07:20","TMCR → ECP (beat peak heat)"],
+                    ["09:00","🏁 FINISH Marine Cove (~171km in ~13hr)"],
                   ].map((row,i) => (
                     <tr key={i} style={{ borderBottom:`1px solid ${gS.border}` }}>
                       <td style={{ padding:"4px", fontWeight:700, color:gS.text, minWidth:50 }}>{row[0]}</td>
