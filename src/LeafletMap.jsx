@@ -82,7 +82,7 @@ const parseGpx = (xml) => {
   return points;
 };
 
-export default function LeafletMap({ riderGps, segments, kmDone, brightness, height = 400, weatherOverlay }) {
+export default function LeafletMap({ riderGps, segments, kmDone, brightness, height = 400, weatherOverlay, ghostPosition, ghostTrail }) {
   const [routePoints, setRoutePoints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -175,6 +175,25 @@ export default function LeafletMap({ riderGps, segments, kmDone, brightness, hei
             </CircleMarker>
           );
         })}
+
+        {/* Ghost trail — faint purple dashed line showing full past attempt */}
+        {ghostTrail && ghostTrail.length > 1 && (
+          <Polyline positions={ghostTrail} pathOptions={{ color:"#a78bfa", weight:2, opacity:0.4, dashArray:"4 4" }} />
+        )}
+
+        {/* Ghost rider position — time-synced to elapsed ride time */}
+        {ghostPosition && ghostPosition.lat && ghostPosition.lng && (
+          <CircleMarker
+            center={[ghostPosition.lat, ghostPosition.lng]}
+            radius={8}
+            pathOptions={{ color:"#7c3aed", fillColor:"#a78bfa", fillOpacity:0.7, weight:2, dashArray:"2 2" }}
+          >
+            <Popup>
+              👻 Ghost position<br/>
+              {ghostPosition.finished ? "Ghost has finished this attempt" : `At ${ghostPosition.kmAtTime.toFixed(1)} km`}
+            </Popup>
+          </CircleMarker>
+        )}
 
         {/* Live rider position — on top of everything */}
         {riderGps && riderGps.lat && riderGps.lng && (

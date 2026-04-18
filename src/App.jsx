@@ -102,7 +102,7 @@ const GEAR = {
     ["Rear light","Btwin Vioo Clip 300","$12–20"],
     ["Padded bib shorts","Triban RC 100 bib","$40–60"],
     ["Cycling gloves","Triban RC 100","$12–20"],
-    ["Spare tubes ×2","Btwin Presta 700×25c","$20"],
+    ["Spare tubulars ×2 (CRITICAL)","Replace + carry backup after Apr 11 puncture","$60-80"],
     ["Tyre levers ×3","Btwin plastic","$3–5"],
     ["Mini pump","Btwin 500 w/gauge","$18–30"],
     ["Multi-tool","Btwin 900","$15–25"],
@@ -145,18 +145,14 @@ const SKIN_PROTOCOL = [
 ];
 
 const PREP_TIMELINE = [
-  ["Apr 5 Sun","Rest","Day 7 post-tx, skin still healing"],
-  ["Apr 6–7","Light walking only","No sweat-heavy activity"],
-  ["Apr 8 Tue","30km easy PCN ride","Day 10, first saddle time"],
-  ["Apr 9 Wed","Rest","Recovery"],
-  ["Apr 10 Thu","50km moderate","Gear shakedown. Full kit test."],
-  ["Apr 11 Fri","Bike shop service","Professional tune-up"],
-  ["Apr 12 Sat","Rest + carb load","Pre-ride fueling begins"],
-  ["Apr 13 Sun","Rest / CFA study","Sleep bank"],
-  ["Apr 14–16","Light spin 30min/day","Keep legs moving"],
-  ["Apr 17 Thu","Final bike check","15km shakedown"],
-  ["Apr 18 Fri","Pre-ride rest","Large meals, sleep bank"],
-  ["Apr 18 ~22:00","🚴 RIDE START (Blitz)","If going Apr 18"],
+  ["Apr 11 Sat","Attempt 1 — punctured rear tubular at km 77","Tuas exit. Aborted."],
+  ["Apr 12 Sun","Recovery + bike shop","Replace tubular, full check"],
+  ["Apr 13 Mon","Rest","Recovery from Sat effort"],
+  ["Apr 14 Tue","30km easy","Test new tubular under load"],
+  ["Apr 15 Wed","Rest","Light walking only"],
+  ["Apr 16 Thu","20km moderate + carry tubular spare","Final shakedown with backup"],
+  ["Apr 17 Fri","Pre-ride rest","Large carb meal, hydrate, sleep bank"],
+  ["Apr 18 Sat ~22:00","🚴 ATTEMPT 2 START (Blitz)","Carry 2x spare tubulars"],
 ];
 
 const TIPS = [
@@ -222,6 +218,45 @@ const snapshotAttempt = (state, name, elapsed, kmDone) => {
 };
 const deleteAttempt = (id) => {
   saveAttempts(loadAttempts().filter(a => a.id !== id));
+};
+
+// ===== Ghost replay helpers =====
+// Given an attempt and current elapsed ms, find where the ghost rider was at that elapsed time
+const getGhostPosition = (attempt, elapsedMs) => {
+  if (!attempt?.state?.gpsPoints || !attempt.state.startTime) return null;
+  const pts = attempt.state.gpsPoints;
+  if (pts.length === 0) return null;
+  const targetTime = attempt.state.startTime + elapsedMs;
+  // If elapsed time is beyond the ghost's last point, return the last known position (ghost is "done")
+  const lastPt = pts[pts.length - 1];
+  if (targetTime >= lastPt.t) {
+    return { ...lastPt, finished: true, kmAtTime: attempt.kmDone };
+  }
+  // Binary search for the point with closest timestamp
+  let lo = 0, hi = pts.length - 1;
+  while (lo < hi - 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (pts[mid].t <= targetTime) lo = mid;
+    else hi = mid;
+  }
+  // Interpolate between pts[lo] and pts[hi]
+  const p0 = pts[lo], p1 = pts[hi];
+  const span = p1.t - p0.t || 1;
+  const frac = (targetTime - p0.t) / span;
+  const lat = p0.lat + (p1.lat - p0.lat) * frac;
+  const lng = p0.lng + (p1.lng - p0.lng) * frac;
+  // Compute ghost's distance traveled by this point
+  let kmAtTime = 0;
+  for (let i = 1; i <= lo; i++) {
+    kmAtTime += hav({ lat: pts[i-1].lat, lng: pts[i-1].lng }, { lat: pts[i].lat, lng: pts[i].lng });
+  }
+  return { lat, lng, t: targetTime, finished: false, kmAtTime };
+};
+
+// Compute ghost trail polyline (all points as [lat, lng] array)
+const getGhostTrail = (attempt) => {
+  if (!attempt?.state?.gpsPoints) return [];
+  return attempt.state.gpsPoints.map(p => [p.lat, p.lng]);
 };
 
 const fmtTime = (ms) => {
@@ -290,8 +325,8 @@ const initState = () => ({
 });
 
 const DATE_INFO = {
-  apr10: { label:"Apr 10 Fri", sub:"Fri 22:00 → Sat 10:30", day:"Day 12 post-tx" },
-  apr11: { label:"Apr 11 Sat", sub:"Sat 22:00 → Sun 10:30", day:"Day 13 post-tx" },
+  apr17: { label:"Apr 17 Fri", sub:"Fri 22:00 → Sat 10:30", day:"Day 19 post-tx" },
+  apr18: { label:"Apr 18 Sat", sub:"Sat 22:00 → Sun 10:30", day:"Day 20 post-tx" },
 };
 
 // ==========================================================================
@@ -315,6 +350,7 @@ export default function App() {
   const [riderMode, setRiderMode] = useState(() => sessionStorage.getItem("rti-rider") === "1");
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [segWeather, setSegWeather] = useState(null);
+  const [ghostAttemptId, setGhostAttemptId] = useState(() => localStorage.getItem("rti-ghost-attempt") || null);
   const timerRef = useRef(null);
   const watchRef = useRef(null);
   const gpsSyncRef = useRef(null);
@@ -452,6 +488,19 @@ export default function App() {
   const pct = (kmDone / TOTAL_KM * 100).toFixed(0);
   const gpsKm = state.gpsPoints.length > 1 ? state.gpsPoints.reduce((sum, p, i) => i === 0 ? 0 : sum + hav(state.gpsPoints[i-1], p), 0) : 0;
   const gpsCurSpeed = lastGps?.speed || 0;
+
+  // Ghost replay — resolve selected attempt and compute current ghost position
+  const ghostAttempt = ghostAttemptId ? loadAttempts().find(a => a.id === ghostAttemptId) : null;
+  const ghostPosition = ghostAttempt && state.status === "active" ? getGhostPosition(ghostAttempt, elapsed()) : null;
+  const ghostTrail = ghostAttempt ? getGhostTrail(ghostAttempt) : [];
+  // Delta: km difference (ghost's km at current elapsed - my current km)
+  const ghostDelta = ghostPosition ? { km: ghostPosition.kmAtTime - gpsKm, finished: ghostPosition.finished } : null;
+
+  const setGhost = (id) => {
+    setGhostAttemptId(id);
+    if (id) localStorage.setItem("rti-ghost-attempt", id);
+    else localStorage.removeItem("rti-ghost-attempt");
+  };
 
   const nextWpIdx = Math.min(currentSeg.id, WP.length - 1);
   const nextWp = WP[nextWpIdx] || WP[WP.length - 1];
@@ -651,12 +700,12 @@ export default function App() {
 
       {/* ===== TRACKER ===== */}
       {tab === "tracker" && (
-        <TrackerTab state={state} startRide={startRide} pauseRide={pauseRide} resumeRide={resumeRide} resetRide={resetRide} loadAttemptById={loadAttemptById} completeSeg={completeSeg} undoSeg={undoSeg} addNote={addNote} elapsed={elapsed()} kmDone={kmDone} kmLeft={kmLeft} pct={pct} segWeather={segWeather} S={S} />
+        <TrackerTab state={state} startRide={startRide} pauseRide={pauseRide} resumeRide={resumeRide} resetRide={resetRide} loadAttemptById={loadAttemptById} completeSeg={completeSeg} undoSeg={undoSeg} addNote={addNote} elapsed={elapsed()} kmDone={kmDone} kmLeft={kmLeft} pct={pct} segWeather={segWeather} ghostAttemptId={ghostAttemptId} setGhost={setGhost} ghostDelta={ghostDelta} S={S} />
       )}
 
       {/* ===== MAP + CHAT ===== */}
       {tab === "map" && (
-        <MapChatTab state={state} lastGps={lastGps} gpsTracking={gpsTracking} nextWp={nextWp} kmDone={kmDone} pct={pct} brightness={brightness} segWeather={segWeather} S={S} />
+        <MapChatTab state={state} lastGps={lastGps} gpsTracking={gpsTracking} nextWp={nextWp} kmDone={kmDone} pct={pct} brightness={brightness} segWeather={segWeather} ghostPosition={ghostPosition} ghostTrail={ghostTrail} ghostAttempt={ghostAttempt} ghostDelta={ghostDelta} S={S} />
       )}
 
       {/* ===== SYNC ===== */}
@@ -1376,7 +1425,7 @@ function NavTab({ state, currentSeg, currentTurns, nextWp, distToNextWp, bearing
 // ==========================================================================
 // TRACKER TAB
 // ==========================================================================
-function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, loadAttemptById, completeSeg, undoSeg, addNote, elapsed, kmDone, kmLeft, pct, segWeather, S }) {
+function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, loadAttemptById, completeSeg, undoSeg, addNote, elapsed, kmDone, kmLeft, pct, segWeather, ghostAttemptId, setGhost, ghostDelta, S }) {
   const [attempts, setAttempts] = useState(loadAttempts);
   const [showAttempts, setShowAttempts] = useState(false);
   const refreshAttempts = () => setAttempts(loadAttempts());
@@ -1386,16 +1435,16 @@ function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, loadAt
         <div style={{ fontSize:40, marginBottom:12 }}>🚴</div>
         <h2 style={{ fontSize:18, fontWeight:800, margin:"0 0 4px", fontFamily:"system-ui" }}>SG Round Island</h2>
         <p style={{ fontSize:11, color:S.mut, marginBottom:6, fontFamily:"system-ui" }}>{TOTAL_KM} km · 11 segments</p>
-        <p style={{ fontSize:9, color:"#f87171", marginBottom:16, fontFamily:"system-ui" }}>⚠️ Day 12–13 post-tx · Blitz only</p>
+        <p style={{ fontSize:9, color:"#f87171", marginBottom:16, fontFamily:"system-ui" }}>⚠️ Day 19–20 post-tx · Blitz only · 2nd attempt after puncture</p>
         <div style={{ display:"flex", flexDirection:"column", gap:8, maxWidth:320, margin:"0 auto" }}>
           <div style={{ fontSize:9, color:"#22c55e", fontWeight:700, marginBottom:-4, fontFamily:"system-ui" }}>★ RECOMMENDED</div>
-          <button onClick={()=>startRide("apr11")} style={{ padding:"14px", fontSize:12, fontWeight:700, borderRadius:10, border:"2px solid #22c55e", background:"#22c55e11", color:"#22c55e", cursor:"pointer", textAlign:"left" }}>
-            Apr 11 Sat · Blitz (Day 13)
+          <button onClick={()=>startRide("apr18")} style={{ padding:"14px", fontSize:12, fontWeight:700, borderRadius:10, border:"2px solid #22c55e", background:"#22c55e11", color:"#22c55e", cursor:"pointer", textAlign:"left" }}>
+            Apr 18 Sat · Blitz (Day 20)
             <div style={{ fontSize:9, fontWeight:400, marginTop:2 }}>Sat 22:00 → Sun 10:30 · Auto-enables GPS + Wake Lock</div>
           </button>
           <div style={{ fontSize:9, color:S.dim, fontWeight:700, marginBottom:-4, marginTop:4, fontFamily:"system-ui" }}>BACKUP</div>
-          <button onClick={()=>startRide("apr10")} style={{ padding:"14px", fontSize:12, fontWeight:700, borderRadius:10, border:"2px solid #f97316", background:"#f9731611", color:"#f97316", cursor:"pointer", textAlign:"left" }}>
-            Apr 10 Fri · Blitz (Day 12)
+          <button onClick={()=>startRide("apr17")} style={{ padding:"14px", fontSize:12, fontWeight:700, borderRadius:10, border:"2px solid #f97316", background:"#f9731611", color:"#f97316", cursor:"pointer", textAlign:"left" }}>
+            Apr 17 Fri · Blitz (Day 19)
             <div style={{ fontSize:9, fontWeight:400, marginTop:2 }}>Fri 22:00 → Sat 10:30 · Weather contingency</div>
           </button>
         </div>
@@ -1430,13 +1479,38 @@ function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, loadAt
         </div>
       </div>
 
+      {/* Ghost status banner — shown when a ghost is selected and ride is active */}
+      {ghostAttemptId && state.status === "active" && (()=>{
+        const ghostAtt = attempts.find(a => a.id === ghostAttemptId);
+        if (!ghostAtt) return null;
+        return (
+          <div style={{ background:"#1a0d2e", borderRadius:8, padding:10, marginBottom:8, border:"1px solid #7c3aed" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:18 }}>👻</span>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:10, color:"#a78bfa", fontWeight:700, fontFamily:"system-ui" }}>Racing Ghost: {ghostAtt.name}</div>
+                {ghostDelta && (
+                  <div style={{ fontSize:11, color:"#e9d5ff", marginTop:2, fontFamily:"system-ui", fontWeight:700 }}>
+                    {ghostDelta.finished ? "Ghost finished — you vs final time" :
+                     ghostDelta.km > 0.1 ? `Ghost ${ghostDelta.km.toFixed(2)} km AHEAD` :
+                     ghostDelta.km < -0.1 ? `You ${Math.abs(ghostDelta.km).toFixed(2)} km AHEAD ⚡` :
+                     "Neck and neck"}
+                  </div>
+                )}
+              </div>
+              <button onClick={()=>setGhost(null)} style={{ padding:"5px 10px", fontSize:9, fontWeight:700, borderRadius:5, border:"1px solid #7c3aed", background:"transparent", color:"#a78bfa", cursor:"pointer", fontFamily:"system-ui" }}>Stop</button>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Saved Attempts */}
       <div style={{ background:S.card, borderRadius:10, padding:10, border:`1px solid ${S.border}`, marginBottom:8 }}>
         <button onClick={()=>setShowAttempts(!showAttempts)} style={{ width:"100%", display:"flex", alignItems:"center", gap:8, background:"transparent", border:"none", color:S.text, cursor:"pointer", padding:0, fontFamily:"system-ui", textAlign:"left" }}>
           <span style={{ fontSize:14 }}>💾</span>
           <div style={{ flex:1 }}>
             <div style={{ fontSize:11, fontWeight:700 }}>Saved Attempts <span style={{ fontSize:9, color:S.dim, fontWeight:400 }}>· {attempts.length}</span></div>
-            <div style={{ fontSize:8, color:S.dim, marginTop:1 }}>{attempts.length === 0 ? "No saved attempts yet" : "Load a previous test or real ride"}</div>
+            <div style={{ fontSize:8, color:S.dim, marginTop:1 }}>{attempts.length === 0 ? "No saved attempts yet" : "Load or race as ghost"}</div>
           </div>
           <span style={{ fontSize:10, color:S.mut }}>{showAttempts ? "▼" : "▶"}</span>
         </button>
@@ -1447,18 +1521,32 @@ function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, loadAt
                 Tap <b>💾 Save & Reset</b> above to archive your current ride as an attempt
               </div>
             ) : (
-              [...attempts].reverse().map(a => (
-                <div key={a.id} style={{ display:"flex", gap:6, alignItems:"center", padding:"8px 10px", marginBottom:4, background:"#0a0f1a", borderRadius:6, border:`1px solid ${S.border}` }}>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:S.text, fontFamily:"system-ui", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.name}</div>
-                    <div style={{ fontSize:8, color:S.dim, fontFamily:"system-ui" }}>
-                      {a.kmDone}km · {a.segsDone}/11 segs · {fmtTime(a.elapsed)} · {new Date(a.createdAt).toLocaleDateString()}
+              [...attempts].reverse().map(a => {
+                const isGhost = a.id === ghostAttemptId;
+                const hasGps = a.state?.gpsPoints?.length > 0;
+                return (
+                  <div key={a.id} style={{ display:"flex", gap:4, alignItems:"center", padding:"8px 10px", marginBottom:4, background: isGhost ? "#1a0d2e" : "#0a0f1a", borderRadius:6, border:`1px solid ${isGhost ? "#7c3aed" : S.border}`, flexWrap:"wrap" }}>
+                    <div style={{ flex:1, minWidth:120 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:S.text, fontFamily:"system-ui", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {isGhost && "👻 "}{a.name}
+                      </div>
+                      <div style={{ fontSize:8, color:S.dim, fontFamily:"system-ui" }}>
+                        {a.kmDone}km · {a.segsDone}/11 · {fmtTime(a.elapsed)} · {hasGps ? `${a.state.gpsPoints.length} pts` : "no GPS"}
+                      </div>
                     </div>
+                    <button
+                      onClick={()=>setGhost(isGhost ? null : a.id)}
+                      disabled={!hasGps}
+                      title={!hasGps ? "No GPS data — can't race" : isGhost ? "Stop racing" : "Race as ghost"}
+                      style={{ padding:"5px 8px", fontSize:8, fontWeight:700, borderRadius:4, border: isGhost ? "1px solid #a78bfa" : "none", cursor:hasGps?"pointer":"not-allowed", background: isGhost ? "transparent" : hasGps ? "#7c3aed" : "#374151", color: isGhost ? "#a78bfa" : "#fff", opacity:hasGps?1:0.4, fontFamily:"system-ui" }}
+                    >
+                      {isGhost ? "👻 Racing" : "👻 Race"}
+                    </button>
+                    <button onClick={()=>loadAttemptById(a.id)} style={{ padding:"5px 8px", fontSize:8, fontWeight:700, borderRadius:4, border:"none", cursor:"pointer", background:"#3b82f6", color:"#fff", fontFamily:"system-ui" }}>Load</button>
+                    <button onClick={()=>{if(confirm("Delete this attempt?")){ if(isGhost) setGhost(null); deleteAttempt(a.id); refreshAttempts();}}} style={{ padding:"5px 8px", fontSize:8, fontWeight:700, borderRadius:4, border:`1px solid ${S.border}`, cursor:"pointer", background:"transparent", color:"#ef4444", fontFamily:"system-ui" }}>🗑</button>
                   </div>
-                  <button onClick={()=>loadAttemptById(a.id)} style={{ padding:"5px 8px", fontSize:8, fontWeight:700, borderRadius:4, border:"none", cursor:"pointer", background:"#3b82f6", color:"#fff", fontFamily:"system-ui" }}>Load</button>
-                  <button onClick={()=>{if(confirm("Delete this attempt?")){deleteAttempt(a.id); refreshAttempts();}}} style={{ padding:"5px 8px", fontSize:8, fontWeight:700, borderRadius:4, border:`1px solid ${S.border}`, cursor:"pointer", background:"transparent", color:"#ef4444", fontFamily:"system-ui" }}>🗑</button>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
@@ -1496,7 +1584,7 @@ function TrackerTab({ state, startRide, pauseRide, resumeRide, resetRide, loadAt
 // ==========================================================================
 // MAP + CHAT TAB
 // ==========================================================================
-function MapChatTab({ state, lastGps, gpsTracking, nextWp, kmDone, pct, brightness, segWeather, S }) {
+function MapChatTab({ state, lastGps, gpsTracking, nextWp, kmDone, pct, brightness, segWeather, ghostPosition, ghostTrail, ghostAttempt, ghostDelta, S }) {
   // Build riderGps shape compatible with LeafletMap
   const riderGps = lastGps ? { lat: lastGps.lat, lng: lastGps.lng, speed: lastGps.speed, t: lastGps.t } : null;
 
@@ -1511,10 +1599,26 @@ function MapChatTab({ state, lastGps, gpsTracking, nextWp, kmDone, pct, brightne
             <div style={{ fontSize:8, color:S.dim, fontFamily:"system-ui" }}>
               <span style={{ color:"#22c55e" }}>● Done</span> · <span style={{ color:"#3b82f6" }}>● Remaining</span>
               {riderGps && <> · <span style={{ color:"#ec4899" }}>● You</span></>}
+              {ghostPosition && <> · <span style={{ color:"#a78bfa" }}>👻 Ghost</span></>}
             </div>
           </div>
         </div>
-        <LeafletMap riderGps={riderGps} segments={state.segments} kmDone={kmDone} brightness={brightness} height={360} weatherOverlay={segWeather?.areaOverlay} />
+        <LeafletMap riderGps={riderGps} segments={state.segments} kmDone={kmDone} brightness={brightness} height={360} weatherOverlay={segWeather?.areaOverlay} ghostPosition={ghostPosition} ghostTrail={ghostTrail} />
+        {ghostAttempt && ghostDelta && (
+          <div style={{ marginTop:6, padding:"6px 10px", background:"#1a0d2e", borderRadius:5, border:`1px solid #7c3aed` }}>
+            <div style={{ fontSize:9, color:"#a78bfa", fontWeight:700, fontFamily:"system-ui" }}>
+              👻 {ghostAttempt.name}
+              {ghostDelta.finished && <span style={{ color:"#fbbf24", marginLeft:4 }}>(finished)</span>}
+            </div>
+            <div style={{ fontSize:10, color:"#e9d5ff", marginTop:2, fontFamily:"system-ui" }}>
+              {ghostDelta.km > 0.1
+                ? `Ghost ${ghostDelta.km.toFixed(2)} km AHEAD of you`
+                : ghostDelta.km < -0.1
+                ? `You ${Math.abs(ghostDelta.km).toFixed(2)} km AHEAD of ghost ⚡`
+                : "Neck and neck"}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Segment progress bar */}
@@ -1956,7 +2060,7 @@ function GuideModal({ onClose }) {
           <div>
             <GCard t="The Mission" s={gS}>
               <p style={{ margin:"0 0 6px" }}>Circumnavigate Singapore clockwise on a road bike. ~175km total over 11 segments. Start at East Coast Park, hit Tuas Lamp Post 1 (westernmost point), loop through Lim Chu Kang/Woodlands/Sembawang/Punggol/Changi, finish back at ECP.</p>
-              <p style={{ margin:"0" }}>Target date: <b style={{ color:"#22c55e" }}>Apr 11 Sat (recommended)</b> or Apr 10 Fri (backup). Both are Day 12–13 post-treatment from Revival Clinic Bangkok (Mar 29 CO2 + subcision + TCA CROSS + PDLLA).</p>
+              <p style={{ margin:"0" }}>Target date: <b style={{ color:"#22c55e" }}>Apr 18 Sat (recommended)</b> or Apr 17 Fri (backup). 2nd attempt after Apr 11 puncture at km 77. Day 19–20 post-treatment from Revival Clinic Bangkok (Mar 29 CO2 + subcision + TCA CROSS + PDLLA).</p>
             </GCard>
             <GCard t="Why Blitz?" s={gS}>
               Start midnight → finish ~11:30am. Minimizes total sweat + UV exposure on still-fragile post-tx skin. Tuas/LCK hit at 2–5am when traffic is lightest and temperatures coolest. Finish before peak UV (10am–4pm).
@@ -2051,7 +2155,7 @@ function GuideModal({ onClose }) {
               <div style={{ fontSize:10, color:gS.mut, lineHeight:1.5 }}>
                 Treatment: <b style={{ color:gS.text }}>Mar 29, Revival Clinic Bangkok</b><br/>
                 Modalities: CO2 laser + subcision + TCA CROSS + PDLLA<br/>
-                Ride day: <b style={{ color:gS.text }}>Day 12 (Apr 10) or Day 13 (Apr 11)</b>
+                Ride day: <b style={{ color:gS.text }}>Day 19 (Apr 17) or Day 20 (Apr 18)</b>
               </div>
             </div>
             {SKIN_PROTOCOL.map((p,i) => {
@@ -2069,7 +2173,7 @@ function GuideModal({ onClose }) {
         {/* PREP */}
         {gTab === "prep" && (
           <div>
-            <GCard t="2-Week Prep Plan (If riding Apr 18, shift earlier for Apr 10/11)" s={gS}>
+            <GCard t="Recovery + Prep Plan (Apr 11 → Apr 18)" s={gS}>
               <table style={{ width:"100%", fontSize:10, borderCollapse:"collapse", color:gS.mut }}>
                 <tbody>
                   {PREP_TIMELINE.map((row,i) => (
@@ -2164,7 +2268,7 @@ function GuideModal({ onClose }) {
         )}
 
         <div style={{ textAlign:"center", marginTop:16, fontSize:9, color:gS.dim }}>
-          Combined guide · Revival Clinic BKK Mar 29 · Target Apr 10/11
+          Combined guide · Revival Clinic BKK Mar 29 · Target Apr 17/18 (2nd attempt)
         </div>
       </div>
     </div>
